@@ -29,27 +29,44 @@
   --accent-custom: 221.2 83.2% 53.3%;
 }
 
-/* Variables de thème — mode sombre (défaut pour homelab) */
+/* Variables de thème — mode sombre terminal/homelab */
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 6%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 217.2 91.2% 59.8%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
+  /* Fond très sombre style terminal */
+  --background: 216 28% 7%;
+  --foreground: 210 30% 90%;
+
+  /* Cards légèrement plus claires que le fond */
+  --card: 216 28% 9%;
+  --card-foreground: 210 30% 90%;
+
+  --popover: 216 28% 7%;
+  --popover-foreground: 210 30% 90%;
+
+  /* Accent principal : cyan terminal */
+  --primary: 192 100% 42%;
+  --primary-foreground: 216 28% 7%;
+
+  --secondary: 216 20% 14%;
+  --secondary-foreground: 210 30% 90%;
+
+  --muted: 216 20% 14%;
+  --muted-foreground: 215 15% 55%;
+
+  --accent: 216 20% 14%;
+  --accent-foreground: 210 30% 90%;
+
+  --destructive: 0 72% 42%;
   --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 224.3 76.3% 48%;
+
+  /* Bordures subtiles style terminal */
+  --border: 216 20% 16%;
+  --input: 216 20% 14%;
+  --ring: 192 100% 42%;
+
+  /* Couleur d'accent verte terminal disponible */
+  --accent-custom: 192 100% 42%;
+  --terminal-green: 150 100% 50%;
+  --terminal-cyan: 192 100% 42%;
 }
 
 /* Reset de base */
@@ -65,6 +82,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Grille de fond subtile en mode sombre */
+.dark body {
+  background-image:
+    linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
 /* Effet glassmorphism pour les widgets */
 .glass {
   background: rgba(255, 255, 255, 0.05);
@@ -75,7 +100,20 @@ body {
 
 .dark .glass {
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Bordures style terminal pour les cartes */
+.dark .rounded-xl,
+.dark .rounded-lg {
+  box-shadow: 0 0 0 1px hsl(var(--border));
+}
+
+/* Hover glow sur les cartes */
+.dark [class*="border-border"]:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 0 12px hsl(var(--primary) / 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Scrollbar personnalisée */
@@ -89,12 +127,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: hsl(var(--muted-foreground) / 0.25);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--primary) / 0.5);
 }
 
 /* Animation d'entrée pour les widgets */
@@ -111,4 +149,30 @@ body {
 
 .widget-enter {
   animation: fadeInUp 0.3s ease-out;
+}
+
+/* Pulsation status dot */
+@keyframes statusPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+.status-pulse {
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+/* Transitions d'onglets */
+.tab-content {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+/* Glow sur le texte primaire en mode dark */
+.dark .text-primary {
+  text-shadow: 0 0 8px hsl(var(--primary) / 0.4);
 }

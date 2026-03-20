@@ -44,6 +44,14 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     () => import("./items/ActualBudgetWidget").then((m) => m.ActualBudgetWidget),
     { loading: () => loadingFallback }
   ),
+  clock: dynamic(
+    () => import("./items/ClockWidget").then((m) => m.ClockWidget),
+    { loading: () => loadingFallback }
+  ),
+  "search-bar": dynamic(
+    () => import("./items/SearchBarWidget").then((m) => m.SearchBarWidget),
+    { loading: () => loadingFallback }
+  ),
 };
 
 interface WidgetContentProps {

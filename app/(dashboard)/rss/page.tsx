@@ -38,7 +38,7 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
-function FeedPanel({ url, label }: { url: string; label: string }) {
+function FeedPanel({ url, label, onRemove }: { url: string; label: string; onRemove: () => void }) {
   const { data, isLoading, isError, refetch, isFetching } = useQuery<RSSFeed>({
     queryKey: ["rss-page", url],
     queryFn: async () => {
@@ -66,14 +66,23 @@ function FeedPanel({ url, label }: { url: string; label: string }) {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
-          aria-label="Rafraîchir"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+            aria-label="Rafraîchir"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label="Supprimer ce flux"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Articles */}
@@ -205,16 +214,12 @@ export default function RSSPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {feeds.map((feed) => (
-            <div key={feed.url} className="relative">
-              <button
-                onClick={() => removeFeed(feed.url)}
-                className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                aria-label="Supprimer ce flux"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-              <FeedPanel url={feed.url} label={feed.label} />
-            </div>
+            <FeedPanel
+              key={feed.url}
+              url={feed.url}
+              label={feed.label}
+              onRemove={() => removeFeed(feed.url)}
+            />
           ))}
         </div>
       )}

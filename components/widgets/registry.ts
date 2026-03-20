@@ -7,6 +7,8 @@ import {
   Workflow,
   BookOpen,
   Wallet,
+  Clock,
+  Search,
 } from "lucide-react";
 import type { WidgetDefinition } from "@/types";
 
@@ -82,6 +84,24 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     defaultSize: "medium",
     defaultConfig: {},
     componentPath: "ActualBudgetWidget",
+  },
+  {
+    type: "clock",
+    label: "Horloge",
+    description: "Affiche l'heure et la date en temps réel",
+    icon: Clock,
+    defaultSize: "small",
+    defaultConfig: { format24h: true, showSeconds: false, style: "digital" },
+    componentPath: "ClockWidget",
+  },
+  {
+    type: "search-bar",
+    label: "Barre de Recherche",
+    description: "Recherche rapide via votre moteur préféré",
+    icon: Search,
+    defaultSize: "medium",
+    defaultConfig: { engine: "brave" },
+    componentPath: "SearchBarWidget",
   },
 ];
 
