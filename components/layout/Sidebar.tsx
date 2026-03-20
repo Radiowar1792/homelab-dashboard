@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Server,
-  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +20,6 @@ const navItems = [
   { href: "/services", label: "Services", icon: Activity },
   { href: "/rss", label: "Flux RSS", icon: Rss },
   { href: "/llm", label: "LLM Chat", icon: Bot },
-  { href: "/vikunja", label: "Vikunja", icon: CheckSquare },
 ];
 
 const bottomItems = [
