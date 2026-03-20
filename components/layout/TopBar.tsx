@@ -10,6 +10,7 @@ const pageTitles: Record<string, string> = {
   "/services": "Status des Services",
   "/rss": "Flux RSS",
   "/llm": "LLM Chat",
+  "/vikunja": "Vikunja",
   "/settings": "Paramètres",
 };
 

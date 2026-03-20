@@ -47,6 +47,8 @@ const nextConfig: NextConfig = {
       process.env["NEXT_PUBLIC_APP_NAME"] ?? "Homelab Dashboard",
     NEXT_PUBLIC_APP_URL:
       process.env["NEXT_PUBLIC_APP_URL"] ?? "http://localhost:3000",
+    NEXT_PUBLIC_VIKUNJA_URL:
+      process.env["NEXT_PUBLIC_VIKUNJA_URL"] ?? process.env["VIKUNJA_URL"] ?? "",
   },
 };
 
