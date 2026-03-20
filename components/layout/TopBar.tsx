@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Moon, Sun, Bell, Download } from "lucide-react";
+import { Moon, Sun, Bell, Download, LogOut } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -41,6 +41,11 @@ export function TopBar() {
 
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   async function handleInstall() {
     if (!installPrompt) return;
@@ -88,6 +93,16 @@ export function TopBar() {
           aria-label="Notifications"
         >
           <Bell className="h-4 w-4" />
+        </button>
+
+        {/* Déconnexion */}
+        <button
+          onClick={() => void handleLogout()}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label="Se déconnecter"
+          title="Se déconnecter"
+        >
+          <LogOut className="h-4 w-4" />
         </button>
 
         {/* Toggle thème */}
