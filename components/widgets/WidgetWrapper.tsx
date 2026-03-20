@@ -40,14 +40,14 @@ export function WidgetWrapper({
     <div
       className={cn(
         WIDGET_SIZE_CLASSES[widget.size],
-        "glass relative min-h-32 rounded-xl transition-all",
+        "glass bg-card relative min-h-32 rounded-xl transition-all",
         isDragging && "opacity-50 ring-2 ring-primary",
-        isEditMode && "ring-1 ring-border"
+        isEditMode && "ring-1 ring-primary/30"
       )}
     >
       {/* Contrôles d'édition */}
       {isEditMode && (
-        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl bg-card/80 px-2 py-1 backdrop-blur-sm">
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-border bg-muted px-2 py-1.5">
           <button
             {...dragHandleProps}
             className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
