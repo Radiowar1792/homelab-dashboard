@@ -39,6 +39,9 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Homelab Dashboard}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      DASHBOARD_SESSION_DURATION: ${DASHBOARD_SESSION_DURATION:-86400}
     depends_on:
       postgres:
         condition: service_healthy
