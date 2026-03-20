@@ -1,0 +1,211 @@
+# ═══════════════════════════════════════════════════════════════
+# Deploy — Homelab Dashboard
+# Déclenché uniquement sur push main (après merge PR)
+# Étapes : CI complète → Build Docker → Push ghcr.io → Deploy SSH
+# ═══════════════════════════════════════════════════════════════
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Possibilité de déclencher manuellement
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Forcer le déploiement même sans changements"
+        required: false
+        default: "false"
+        type: boolean
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Ne pas annuler un déploiement en cours
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9.15.0"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── CI complète (obligatoire avant le déploiement) ────────────
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+        env:
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+
+      - name: TypeScript check
+        run: pnpm type-check
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Prettier check
+        run: pnpm format:check
+
+  # ── Build et push de l'image Docker sur ghcr.io ──────────────
+  docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: quality
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag "latest" sur main
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Tag avec le SHA court du commit
+            type=sha,prefix=sha-,format=short
+            # Tag avec la date
+            type=raw,value={{date 'YYYY-MM-DD'}}-{{sha}}
+
+      - name: Setup Docker Buildx (multi-platform)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache entre les builds pour accélérer
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Build pour linux/amd64 (serveur homelab)
+          platforms: linux/amd64
+
+      - name: Image digest
+        run: echo "Image poussée avec digest ${{ steps.build.outputs.digest }}"
+
+  # ── Déploiement SSH sur le serveur homelab ────────────────────
+  deploy:
+    name: Deploy to Homelab Server
+    runs-on: ubuntu-latest
+    needs: docker
+    environment: production
+    steps:
+      - name: Checkout (pour récupérer docker-compose.yml)
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copier docker-compose.yml sur le serveur
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            docker-compose.yml \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/homelab-dashboard/docker-compose.yml"
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'ENDSSH'
+            set -e
+
+            cd ~/homelab-dashboard
+
+            echo "📥 Pull de la nouvelle image Docker..."
+            IMAGE_TAG="${{ needs.docker.outputs.image-tag }}" \
+            GITHUB_REPOSITORY="${{ github.repository }}" \
+              docker compose pull app
+
+            echo "🔄 Redémarrage du service..."
+            IMAGE_TAG="${{ needs.docker.outputs.image-tag }}" \
+            GITHUB_REPOSITORY="${{ github.repository }}" \
+              docker compose up -d --no-deps app
+
+            echo "🧹 Nettoyage des anciennes images..."
+            docker image prune -f --filter "until=24h"
+
+            echo "✅ Déploiement terminé"
+          ENDSSH
+
+      - name: Health check post-déploiement
+        run: |
+          echo "⏳ Attente du démarrage (30s)..."
+          sleep 30
+
+          max_attempts=10
+          attempt=0
+          url="https://${{ secrets.APP_DOMAIN }}/api/health"
+
+          until curl -sf --max-time 10 "$url" | grep -q '"status":"ok"'; do
+            attempt=$((attempt + 1))
+            if [ $attempt -ge $max_attempts ]; then
+              echo "❌ Health check échoué après ${max_attempts} tentatives"
+              echo "   URL testée : $url"
+              exit 1
+            fi
+            echo "   Tentative ${attempt}/${max_attempts}..."
+            sleep 10
+          done
+
+          echo "✅ Application opérationnelle : $url"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+  # ── Notification en cas d'échec ───────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [quality, docker, deploy]
+    if: failure()
+    steps:
+      - name: Log failure
+        run: |
+          echo "❌ Le déploiement a échoué !"
+          echo "   Commit : ${{ github.sha }}"
+          echo "   Auteur : ${{ github.actor }}"
+          echo "   Voir les logs : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # TODO : Ajouter notification (webhook N8N, mail, etc.)

@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════
+# docker-compose.dev.yml — Développement local
+# Lance uniquement PostgreSQL et Redis (l'app tourne via pnpm dev)
+# Usage : docker-compose -f docker-compose.dev.yml up -d
+# ═══════════════════════════════════════════════════════════════
+
+name: homelab-dashboard-dev
+
+services:
+
+  # ── PostgreSQL (accessible depuis l'hôte pour Prisma Studio) ─
+  postgres:
+    image: postgres:16-alpine
+    container_name: homelab-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homelab_dashboard
+      POSTGRES_USER: homelab
+      POSTGRES_PASSWORD: homelab
+    ports:
+      - "5432:5432"  # Exposé pour Prisma Studio et accès local
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homelab -d homelab_dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis (accessible depuis l'hôte pour debug) ───────────────
+  redis:
+    image: redis:7-alpine
+    container_name: homelab-dev-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"  # Exposé pour debug local
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis Commander (UI web pour Redis) ───────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: homelab-dev-redis-ui
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools  # Optionnel : docker-compose -f docker-compose.dev.yml --profile tools up -d
+
+volumes:
+  postgres_dev_data:
+    name: homelab-dev-postgres-data
+  redis_dev_data:
+    name: homelab-dev-redis-data

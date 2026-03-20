@@ -1,0 +1,44 @@
+# Dépendances (réinstallées dans le container)
+node_modules
+.pnpm-store
+
+# Build Next.js (reconstruit dans le container)
+.next
+out
+
+# Fichiers d'environnement (injectés via docker-compose)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+.github
+
+# Dev & Tests
+coverage
+.vitest
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs & config locale
+README.md
+CLAUDE.md
+memory/
+
+# Docker (pas besoin dans l'image)
+Dockerfile
+docker-compose*.yml

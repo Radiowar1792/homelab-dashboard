@@ -1,0 +1,148 @@
+// Schéma Prisma — Homelab Dashboard
+// Générateur de client TypeScript
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// AUTHENTIFICATION
+// ─────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          UserRole  @default(ADMIN)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  sessions      Session[]
+  settings      UserSettings?
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
+
+// ─────────────────────────────────────────
+// PARAMÈTRES UTILISATEUR
+// ─────────────────────────────────────────
+
+model UserSettings {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  theme        String   @default("dark")  // "dark" | "light" | "system"
+  accentColor  String   @default("221.2 83.2% 53.3%")  // HSL value
+  sidebarOpen  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ─────────────────────────────────────────
+// WIDGETS
+// ─────────────────────────────────────────
+
+model WidgetConfig {
+  id        String      @id @default(cuid())
+  type      String      // "service-status" | "rss-feed" | "llm-chat" | "home-assistant" | etc.
+  position  Int         // Ordre dans la grille
+  size      WidgetSize  @default(MEDIUM)
+  config    Json        // Configuration spécifique au widget (URLs, tokens, etc.)
+  isVisible Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@map("widget_configs")
+}
+
+enum WidgetSize {
+  SMALL
+  MEDIUM
+  LARGE
+  FULL
+}
+
+// ─────────────────────────────────────────
+// SERVICES À MONITORER
+// ─────────────────────────────────────────
+
+model ServiceDefinition {
+  id             String   @id @default(cuid())
+  name           String
+  url            String
+  icon           String?
+  category       String?
+  expectedStatus Int      @default(200)
+  timeout        Int      @default(5000)  // En ms
+  isActive       Boolean  @default(true)
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("service_definitions")
+}
+
+// ─────────────────────────────────────────
+// INTÉGRATIONS (tokens chiffrés en AES-256)
+// ─────────────────────────────────────────
+
+model Integration {
+  id              String   @id @default(cuid())
+  name            String   @unique  // "homeassistant" | "vikunja" | "n8n" | etc.
+  displayName     String
+  baseUrl         String   @default("")
+  encryptedToken  String?  // Token chiffré en AES-256-GCM
+  encryptedApiKey String?  // API Key chiffrée en AES-256-GCM
+  isEnabled       Boolean  @default(false)
+  lastTestedAt    DateTime?
+  lastTestResult  Boolean?
+  metadata        Json?    // Données supplémentaires (ex: liste des modèles Ollama)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("integrations")
+}
+
+// ─────────────────────────────────────────
+// FLUX RSS
+// ─────────────────────────────────────────
+
+model RSSFeed {
+  id        String   @id @default(cuid())
+  name      String
+  url       String   @unique
+  category  String?
+  isActive  Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rss_feeds")
+}

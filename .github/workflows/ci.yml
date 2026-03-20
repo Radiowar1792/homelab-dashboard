@@ -1,0 +1,101 @@
+# ═══════════════════════════════════════════════════════════════
+# CI — Homelab Dashboard
+# Déclenché sur chaque push et Pull Request
+# Vérifie : TypeScript, ESLint, Prettier, Build Next.js
+# ═══════════════════════════════════════════════════════════════
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9.15.0"
+
+jobs:
+  # ── Lint & TypeScript ─────────────────────────────────────────
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+        env:
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+
+      - name: TypeScript check
+        run: pnpm type-check
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Prettier check
+        run: pnpm format:check
+
+  # ── Build Next.js ─────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Next.js
+        run: pnpm build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+          NEXTAUTH_SECRET: "ci-placeholder-secret-not-used-in-prod"
+          NEXTAUTH_URL: "http://localhost:3000"
+          ENCRYPTION_KEY: "ci-placeholder-key-32-bytes-here!"
+          NEXT_PUBLIC_APP_NAME: "Homelab Dashboard"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: |
+            .next/
+            public/
+          retention-days: 1
