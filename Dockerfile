@@ -8,6 +8,9 @@
 # ── Stage 1 : Dépendances ────────────────────────────────────
 FROM node:20-alpine AS deps
 
+# openssl requis par Prisma pour générer le client
+RUN apk add --no-cache openssl
+
 # Installer pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
@@ -17,12 +20,13 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 
-# Installer les dépendances (incluant devDeps pour le build)
+# Installer toutes les dépendances (devDeps incluses pour le build + seed)
 RUN pnpm install --frozen-lockfile
 
 # ── Stage 2 : Build ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 WORKDIR /app
@@ -35,7 +39,7 @@ COPY --from=deps /app/prisma ./prisma
 COPY . .
 
 # Variables d'env nécessaires au build (valeurs placeholder)
-# Les vraies valeurs sont injectées au runtime
+# Les vraies valeurs sont injectées au runtime via docker-compose
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
@@ -43,7 +47,7 @@ ENV NEXTAUTH_SECRET="build-time-placeholder"
 ENV NEXTAUTH_URL="http://localhost:3000"
 ENV ENCRYPTION_KEY="build-time-placeholder-32-bytes!!"
 
-# Générer le client Prisma
+# Générer le client Prisma (binaire pour l'architecture cible)
 RUN pnpm prisma generate
 
 # Build Next.js
@@ -51,6 +55,9 @@ RUN pnpm build
 
 # ── Stage 3 : Runner (image production minimale) ─────────────
 FROM node:20-alpine AS runner
+
+# openssl requis par Prisma au runtime pour les requêtes DB
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
@@ -61,16 +68,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# Copier uniquement ce qui est nécessaire pour faire tourner l'app
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-
-# Copier le build Next.js (standalone ou standard)
+# Copier avec la bonne ownership pour que nextjs puisse écrire
+# (Prisma écrit son engine binary dans node_modules au premier démarrage)
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 
-# Script de démarrage (migrations + app)
+# Script de démarrage (migrations + seed + app)
 COPY --chown=nextjs:nodejs scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
@@ -82,8 +88,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Healthcheck intégré
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:3000/api/health || exit 1
 
 CMD ["./docker-entrypoint.sh"]
