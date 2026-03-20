@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Fira_Code, Source_Code_Pro, Space_Mono, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Providers } from "@/components/providers";
+import { DynamicFavicon } from "@/components/shared/DynamicFavicon";
 import "./globals.css";
 
 const inter = Inter({
@@ -89,6 +90,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} ${firaCode.variable} ${sourceCodePro.variable} ${spaceMono.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
+          <DynamicFavicon />
           <Providers>{children}</Providers>
         </ThemeProvider>
       </body>

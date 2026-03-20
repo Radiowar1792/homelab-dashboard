@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,6 +34,16 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLogoUrl(localStorage.getItem("app-logo"));
+    function onLogoChange(e: Event) {
+      setLogoUrl((e as CustomEvent<string | null>).detail);
+    }
+    window.addEventListener("homelab:logo-change", onLogoChange);
+    return () => window.removeEventListener("homelab:logo-change", onLogoChange);
+  }, []);
 
   return (
     <motion.aside
@@ -42,7 +53,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex h-14 items-center border-b border-border px-4">
-        <Server className="h-6 w-6 shrink-0 text-primary" />
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="Logo" className="h-6 w-6 shrink-0 rounded-sm object-contain" />
+        ) : (
+          <Server className="h-6 w-6 shrink-0 text-primary" />
+        )}
         <AnimatePresence>
           {!collapsed && (
             <motion.span

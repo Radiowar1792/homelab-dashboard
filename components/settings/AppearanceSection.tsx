@@ -99,6 +99,7 @@ export function AppearanceSection() {
       const dataUrl = ev.target?.result as string;
       setLogoUrl(dataUrl);
       localStorage.setItem("app-logo", dataUrl);
+      window.dispatchEvent(new CustomEvent("homelab:logo-change", { detail: dataUrl }));
     };
     reader.readAsDataURL(file);
   }
@@ -107,6 +108,7 @@ export function AppearanceSection() {
     setLogoUrl(null);
     localStorage.removeItem("app-logo");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    window.dispatchEvent(new CustomEvent("homelab:logo-change", { detail: null }));
   }
 
   return (
