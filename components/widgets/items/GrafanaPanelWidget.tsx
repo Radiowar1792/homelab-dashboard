@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RefreshCw,
   ExternalLink,
@@ -57,15 +57,44 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
   const [showConfig, setShowConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Formulaire local
-  const [form, setForm] = useState<GrafanaConfig>({
-    dashboardId: (config.dashboardId as string) || "",
-    panelId: (config.panelId as string) || "",
-    orgId: (config.orgId as number) || 1,
-    refreshInterval: (config.refreshInterval as string) || "off",
-    theme: (config.theme as string) || "dark",
-    title: (config.title as string) || "",
-  });
+  const STORAGE_KEY = `grafana-config-${id}`;
+
+  function buildDefaultForm(): GrafanaConfig {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as GrafanaConfig;
+    } catch {}
+    return {
+      dashboardId: (config.dashboardId as string) || "",
+      panelId: (config.panelId as string) || "",
+      orgId: (config.orgId as number) || 1,
+      refreshInterval: (config.refreshInterval as string) || "off",
+      theme: (config.theme as string) || "dark",
+      title: (config.title as string) || "",
+    };
+  }
+
+  // Formulaire local — initialisé depuis localStorage si disponible
+  const [form, setForm] = useState<GrafanaConfig>(buildDefaultForm);
+
+  // Sync depuis la DB si le config prop change (ex: rechargement, autre session)
+  // et qu'on n'est pas en train d'éditer
+  useEffect(() => {
+    if (showConfig) return;
+    const fromDb: GrafanaConfig = {
+      dashboardId: (config.dashboardId as string) || "",
+      panelId: (config.panelId as string) || "",
+      orgId: (config.orgId as number) || 1,
+      refreshInterval: (config.refreshInterval as string) || "off",
+      theme: (config.theme as string) || "dark",
+      title: (config.title as string) || "",
+    };
+    if (fromDb.dashboardId || fromDb.panelId) {
+      setForm(fromDb);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fromDb));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.dashboardId, config.panelId, config.orgId, config.refreshInterval, config.theme, config.title]);
 
   const isConfigured = form.dashboardId && String(form.panelId);
 
@@ -86,6 +115,7 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
         body: JSON.stringify({ config: form }),
       });
       if (!res.ok) throw new Error();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
       toast.success("Configuration Grafana sauvegardée");
       queryClient.invalidateQueries({ queryKey: ["widgets"] });
       setShowConfig(false);
