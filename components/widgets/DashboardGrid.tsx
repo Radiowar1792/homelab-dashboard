@@ -15,7 +15,7 @@ import "react-resizable/css/styles.css";
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
-const STORAGE_KEY = "dashboard-grid-layout-v2";
+const STORAGE_KEY = "dashboard-grid-layout";
 
 const DEFAULT_SIZES: Record<WidgetSize, { w: number; h: number }> = {
   small: { w: 3, h: 2 },
@@ -48,19 +48,64 @@ function buildDefaultLayout(widgets: WidgetConfig[]): LayoutItem[] {
   });
 }
 
-function mergeWithSaved(
-  widgets: WidgetConfig[],
-  saved: LayoutItem[]
+/**
+ * Charge le layout depuis localStorage, en fusionnant avec les widgets actuels.
+ * Si un widget n'a pas de position sauvegardée, il est placé en bas du layout.
+ */
+function loadLayoutFromStorage(widgets: WidgetConfig[]): LayoutItem[] {
+  if (typeof window === "undefined") return buildDefaultLayout(widgets);
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return buildDefaultLayout(widgets);
+
+    const saved = JSON.parse(raw) as LayoutItem[];
+    const savedMap = new Map(saved.map((l) => [l.i, l]));
+    const validIds = new Set(widgets.map((w) => w.id));
+
+    // Items sauvegardés valides (widget existe toujours)
+    const filteredSaved = saved.filter((l) => validIds.has(l.i));
+
+    // Widgets sans position sauvegardée (nouveaux widgets non encore positionnés)
+    const unsaved = widgets.filter((w) => !savedMap.has(w.id));
+    if (unsaved.length === 0) return filteredSaved;
+
+    const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+    let x = 0;
+    const extra = unsaved.map((w) => {
+      const { w: ww, h } = DEFAULT_SIZES[w.size];
+      if (x + ww > COLS) x = 0;
+      const item: LayoutItem = { i: w.id, x, y: maxY, w: ww, h };
+      x += ww;
+      return item;
+    });
+
+    return [...filteredSaved, ...extra];
+  } catch {
+    return buildDefaultLayout(widgets);
+  }
+}
+
+/**
+ * Fusionne le layout existant avec la nouvelle liste de widgets.
+ * Utilisé après ajout/suppression de widgets pour éviter de réinitialiser
+ * tout le layout depuis localStorage.
+ */
+function mergeLayout(
+  current: LayoutItem[],
+  visible: WidgetConfig[]
 ): LayoutItem[] {
-  const savedMap = new Map(saved.map((l) => [l.i, l]));
-  const validIds = new Set(widgets.map((w) => w.id));
+  const existingIds = new Set(current.map((l) => l.i));
+  const validIds = new Set(visible.map((w) => w.id));
 
-  const filteredSaved = saved.filter((l) => validIds.has(l.i));
-  const newWidgets = widgets.filter((w) => !savedMap.has(w.id));
+  // Garder uniquement les widgets qui existent encore
+  const filtered = current.filter((l) => validIds.has(l.i));
 
-  if (newWidgets.length === 0) return filteredSaved;
+  // Ajouter les nouveaux widgets en bas
+  const newWidgets = visible.filter((w) => !existingIds.has(w.id));
+  if (newWidgets.length === 0) return filtered;
 
-  const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+  const maxY = filtered.reduce((m, l) => Math.max(m, l.y + l.h), 0);
   let x = 0;
   const extra = newWidgets.map((w) => {
     const { w: ww, h } = DEFAULT_SIZES[w.size];
@@ -70,25 +115,25 @@ function mergeWithSaved(
     return item;
   });
 
-  return [...filteredSaved, ...extra];
+  return [...filtered, ...extra];
 }
 
-function loadLayout(widgets: WidgetConfig[]): LayoutItem[] {
-  if (typeof window === "undefined") return buildDefaultLayout(widgets);
+function saveLayout(items: LayoutItem[]) {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as LayoutItem[];
-      return mergeWithSaved(widgets, parsed);
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   } catch {}
-  return buildDefaultLayout(widgets);
 }
 
 export function DashboardGrid() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [layout, setLayout] = useState<LayoutItem[]>([]);
+  // layoutReady = true uniquement après chargement depuis localStorage.
+  // On n'affiche GridLayout qu'à ce moment pour éviter qu'il
+  // appelle onLayoutChange avec un layout vide et écrase la sauvegarde.
+  const [layoutReady, setLayoutReady] = useState(false);
+  const initializedRef = useRef(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1200);
 
@@ -101,14 +146,29 @@ export function DashboardGrid() {
   const widgetIdsKey = visibleWidgets.map((w) => w.id).join(",");
 
   useEffect(() => {
+    // Attendre que le chargement initial soit terminé
+    if (isLoading) return;
+
     const visible = widgets.filter((w) => w.isVisible);
-    if (visible.length > 0) {
-      setLayout(loadLayout(visible));
+
+    if (!initializedRef.current) {
+      // Première initialisation : charger depuis localStorage
+      const loaded =
+        visible.length > 0 ? loadLayoutFromStorage(visible) : [];
+      setLayout(loaded);
+      initializedRef.current = true;
+      setLayoutReady(true);
     } else {
-      setLayout([]);
+      // Changement de widgets (ajout/suppression) :
+      // fusionner sans réinitialiser tout le layout
+      setLayout((prev) => {
+        const merged = mergeLayout(prev, visible);
+        saveLayout(merged);
+        return merged;
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [widgetIdsKey]);
+  }, [widgetIdsKey, isLoading]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -121,13 +181,18 @@ export function DashboardGrid() {
     return () => ro.disconnect();
   }, []);
 
-  const handleLayoutChange = useCallback((newLayout: Layout) => {
-    const mutable = [...newLayout] as LayoutItem[];
-    setLayout(mutable);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mutable));
-    } catch {}
-  }, []);
+  // Sauvegarde le layout dans localStorage après chaque drag/resize.
+  // Ne sauvegarde PAS avant que layoutReady=true pour éviter d'écraser
+  // le layout stocké avec un layout auto-généré vide.
+  const handleLayoutChange = useCallback(
+    (newLayout: Layout) => {
+      if (!layoutReady) return;
+      const mutable = [...newLayout] as LayoutItem[];
+      setLayout(mutable);
+      saveLayout(mutable);
+    },
+    [layoutReady]
+  );
 
   const gridConfig = useMemo(
     () => ({
@@ -156,6 +221,8 @@ export function DashboardGrid() {
     }),
     [isEditMode]
   );
+
+  const showSkeleton = isLoading || !layoutReady;
 
   return (
     <div className="space-y-4">
@@ -198,7 +265,7 @@ export function DashboardGrid() {
 
       {/* Grille */}
       <div ref={containerRef}>
-        {isLoading ? (
+        {showSkeleton ? (
           <div className="grid grid-cols-4 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <div
