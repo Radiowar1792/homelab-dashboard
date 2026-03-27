@@ -24,8 +24,9 @@ const THEME_OPTIONS = [
   { value: "light", label: "Clair" },
 ];
 
+const GRAFANA_BASE_URL = "http://172.16.10.154:3000";
+
 interface GrafanaConfig {
-  grafanaUrl: string;
   dashboardId: string;
   panelId: string;
   orgId: number;
@@ -35,7 +36,7 @@ interface GrafanaConfig {
 }
 
 function buildIframeUrl(cfg: GrafanaConfig): string {
-  const base = cfg.grafanaUrl.replace(/\/$/, "");
+  const base = GRAFANA_BASE_URL;
   const params = new URLSearchParams({
     panelId: String(cfg.panelId),
     orgId: String(cfg.orgId || 1),
@@ -58,10 +59,6 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
 
   // Formulaire local
   const [form, setForm] = useState<GrafanaConfig>({
-    grafanaUrl:
-      (config.grafanaUrl as string) ||
-      process.env.NEXT_PUBLIC_GRAFANA_URL ||
-      "",
     dashboardId: (config.dashboardId as string) || "",
     panelId: (config.panelId as string) || "",
     orgId: (config.orgId as number) || 1,
@@ -70,8 +67,7 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
     title: (config.title as string) || "",
   });
 
-  const isConfigured =
-    form.grafanaUrl && form.dashboardId && String(form.panelId);
+  const isConfigured = form.dashboardId && String(form.panelId);
 
   const iframeUrl = isConfigured ? buildIframeUrl(form) : null;
 
@@ -93,7 +89,7 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
       toast.success("Configuration Grafana sauvegardée");
       queryClient.invalidateQueries({ queryKey: ["widgets"] });
       setShowConfig(false);
-      if (form.grafanaUrl && form.dashboardId && form.panelId) {
+      if (form.dashboardId && form.panelId) {
         setIsIframeLoading(true);
         setHasError(false);
         setRefreshKey((k) => k + 1);
@@ -152,22 +148,6 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
               </ol>
             </div>
           )}
-
-          {/* URL Grafana */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              URL Grafana
-            </label>
-            <input
-              type="url"
-              value={form.grafanaUrl}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, grafanaUrl: e.target.value }))
-              }
-              placeholder="http://192.168.1.x:3000"
-              className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
 
           {/* Dashboard ID */}
           <div className="space-y-1">
@@ -276,7 +256,7 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
           {/* Bouton sauvegarder */}
           <button
             onClick={() => void handleSave()}
-            disabled={isSaving || !form.grafanaUrl || !form.dashboardId || !form.panelId}
+            disabled={isSaving || !form.dashboardId || !form.panelId}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             {isSaving ? "Sauvegarde…" : "Sauvegarder"}
