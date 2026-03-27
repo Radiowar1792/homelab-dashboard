@@ -4,24 +4,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { WIDGET_SIZE_CLASSES } from "@/types";
 import { WidgetContent } from "./WidgetContent";
 import type { WidgetConfig } from "@/types";
-
 
 interface WidgetWrapperProps {
   widget: WidgetConfig;
   isEditMode: boolean;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
-  isDragging?: boolean;
 }
 
-export function WidgetWrapper({
-  widget,
-  isEditMode,
-  dragHandleProps,
-  isDragging,
-}: WidgetWrapperProps) {
+export function WidgetWrapper({ widget, isEditMode }: WidgetWrapperProps) {
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -39,18 +30,15 @@ export function WidgetWrapper({
   return (
     <div
       className={cn(
-        WIDGET_SIZE_CLASSES[widget.size],
-        "glass bg-card relative min-h-32 rounded-xl transition-all",
-        isDragging && "opacity-50 ring-2 ring-primary",
-        isEditMode && "ring-1 ring-primary/30"
+        "glass bg-card relative h-full w-full overflow-hidden rounded-xl transition-all",
+        isEditMode && "ring-1 ring-dashed ring-primary/50"
       )}
     >
       {/* Contrôles d'édition */}
       {isEditMode && (
-        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-border bg-muted px-2 py-1.5">
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-border bg-muted/80 px-2 py-1.5 backdrop-blur-sm">
           <button
-            {...dragHandleProps}
-            className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            className="drag-handle cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
             aria-label="Déplacer le widget"
           >
             <GripVertical className="h-4 w-4" />
@@ -58,7 +46,7 @@ export function WidgetWrapper({
           <button
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
-            className="text-muted-foreground hover:text-destructive-foreground"
+            className="text-muted-foreground hover:text-destructive"
             aria-label="Supprimer le widget"
           >
             <X className="h-4 w-4" />
@@ -67,7 +55,7 @@ export function WidgetWrapper({
       )}
 
       {/* Contenu du widget */}
-      <div className={cn("h-full", isEditMode && "pt-8")}>
+      <div className={cn("h-full overflow-auto", isEditMode && "pt-8")}>
         <WidgetContent widget={widget} isEditMode={isEditMode} />
       </div>
     </div>

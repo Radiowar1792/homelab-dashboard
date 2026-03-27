@@ -13,7 +13,10 @@ const loadingFallback = (
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
   "service-status": dynamic(
-    () => import("./items/ServiceStatusWidget").then((m) => m.ServiceStatusWidget),
+    () =>
+      import("./items/ServiceStatusWidget").then(
+        (m) => m.ServiceStatusWidget
+      ),
     { loading: () => loadingFallback }
   ),
   "rss-feed": dynamic(
@@ -25,7 +28,10 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     { loading: () => loadingFallback }
   ),
   "home-assistant": dynamic(
-    () => import("./items/HomeAssistantWidget").then((m) => m.HomeAssistantWidget),
+    () =>
+      import("./items/HomeAssistantWidget").then(
+        (m) => m.HomeAssistantWidget
+      ),
     { loading: () => loadingFallback }
   ),
   "vikunja-tasks": dynamic(
@@ -41,7 +47,8 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     { loading: () => loadingFallback }
   ),
   "actual-budget": dynamic(
-    () => import("./items/ActualBudgetWidget").then((m) => m.ActualBudgetWidget),
+    () =>
+      import("./items/ActualBudgetWidget").then((m) => m.ActualBudgetWidget),
     { loading: () => loadingFallback }
   ),
   clock: dynamic(
@@ -49,7 +56,34 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     { loading: () => loadingFallback }
   ),
   "search-bar": dynamic(
-    () => import("./items/SearchBarWidget").then((m) => m.SearchBarWidget),
+    () =>
+      import("./items/SearchBarWidget").then((m) => m.SearchBarWidget),
+    { loading: () => loadingFallback }
+  ),
+  "grafana-panel": dynamic(
+    () =>
+      import("./items/GrafanaPanelWidget").then(
+        (m) => m.GrafanaPanelWidget
+      ),
+    { loading: () => loadingFallback }
+  ),
+  weather: dynamic(
+    () => import("./items/WeatherWidget").then((m) => m.WeatherWidget),
+    { loading: () => loadingFallback }
+  ),
+  "quick-notes": dynamic(
+    () =>
+      import("./items/QuickNotesWidget").then((m) => m.QuickNotesWidget),
+    { loading: () => loadingFallback }
+  ),
+  "public-ip": dynamic(
+    () =>
+      import("./items/PublicIPWidget").then((m) => m.PublicIPWidget),
+    { loading: () => loadingFallback }
+  ),
+  "ping-monitor": dynamic(
+    () =>
+      import("./items/PingMonitorWidget").then((m) => m.PingMonitorWidget),
     { loading: () => loadingFallback }
   ),
 };
