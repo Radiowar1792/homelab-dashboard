@@ -5,14 +5,15 @@ import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { WIDGET_REGISTRY } from "./registry";
-import type { WidgetConfig } from "@/types";
+import type { WidgetConfig, WidgetSize } from "@/types";
 
 interface AddWidgetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onWidgetAdded?: (id: string, size: WidgetSize) => void;
 }
 
-export function AddWidgetDialog({ open, onOpenChange }: AddWidgetDialogProps) {
+export function AddWidgetDialog({ open, onOpenChange, onWidgetAdded }: AddWidgetDialogProps) {
   const queryClient = useQueryClient();
 
   const { data: existingWidgets = [] } = useQuery<WidgetConfig[]>({
@@ -37,7 +38,8 @@ export function AddWidgetDialog({ open, onOpenChange }: AddWidgetDialogProps) {
       if (!res.ok) throw new Error("Erreur lors de l'ajout");
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { widget: WidgetConfig }) => {
+      if (onWidgetAdded) onWidgetAdded(data.widget.id, data.widget.size);
       queryClient.invalidateQueries({ queryKey: ["widgets"] });
       toast.success("Widget ajouté");
       onOpenChange(false);

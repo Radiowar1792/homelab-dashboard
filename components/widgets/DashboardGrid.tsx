@@ -181,6 +181,22 @@ export function DashboardGrid() {
     return () => ro.disconnect();
   }, []);
 
+  // Insère immédiatement le layout item du nouveau widget avant que
+  // la query se rafraîchisse, pour éviter le saut de position.
+  const handleWidgetAdded = useCallback(
+    (id: string, size: WidgetSize) => {
+      setLayout((prev) => {
+        const { w, h } = DEFAULT_SIZES[size];
+        const maxY = prev.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+        const newItem: LayoutItem = { i: id, x: 0, y: maxY, w, h };
+        const next = [...prev, newItem];
+        saveLayout(next);
+        return next;
+      });
+    },
+    []
+  );
+
   // Sauvegarde le layout dans localStorage après chaque drag/resize.
   // Ne sauvegarde PAS avant que layoutReady=true pour éviter d'écraser
   // le layout stocké avec un layout auto-généré vide.
@@ -307,7 +323,7 @@ export function DashboardGrid() {
         )}
       </div>
 
-      <AddWidgetDialog open={isAddOpen} onOpenChange={setIsAddOpen} />
+      <AddWidgetDialog open={isAddOpen} onOpenChange={setIsAddOpen} onWidgetAdded={handleWidgetAdded} />
     </div>
   );
 }
