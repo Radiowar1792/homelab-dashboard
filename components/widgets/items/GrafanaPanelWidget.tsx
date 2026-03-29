@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   RefreshCw,
   ExternalLink,
@@ -77,24 +77,6 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
   // Formulaire local — initialisé depuis localStorage si disponible
   const [form, setForm] = useState<GrafanaConfig>(buildDefaultForm);
 
-  // Sync depuis la DB si le config prop change (ex: rechargement, autre session)
-  // et qu'on n'est pas en train d'éditer
-  useEffect(() => {
-    if (showConfig) return;
-    const fromDb: GrafanaConfig = {
-      dashboardId: (config.dashboardId as string) || "",
-      panelId: (config.panelId as string) || "",
-      orgId: (config.orgId as number) || 1,
-      refreshInterval: (config.refreshInterval as string) || "off",
-      theme: (config.theme as string) || "dark",
-      title: (config.title as string) || "",
-    };
-    if (fromDb.dashboardId || fromDb.panelId) {
-      setForm(fromDb);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(fromDb));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.dashboardId, config.panelId, config.orgId, config.refreshInterval, config.theme, config.title]);
 
   const isConfigured = form.dashboardId && String(form.panelId);
 
@@ -108,6 +90,8 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
 
   async function handleSave() {
     setIsSaving(true);
+    // Save to localStorage immediately for resilience
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch {}
     try {
       const res = await fetch(`/api/widgets/${id}`, {
         method: "PATCH",
@@ -115,7 +99,6 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
         body: JSON.stringify({ config: form }),
       });
       if (!res.ok) throw new Error();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
       toast.success("Configuration Grafana sauvegardée");
       queryClient.invalidateQueries({ queryKey: ["widgets"] });
       setShowConfig(false);
