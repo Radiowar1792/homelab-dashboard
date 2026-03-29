@@ -40,8 +40,6 @@ function buildIframeUrl(cfg: Config): string {
 }
 
 export function MonitoringGrafanaPanelWidget({ id }: { id: string }) {
-  const STORAGE_KEY = `monitoring-config-${id}`;
-
   const [form, setForm] = useState<Config>({
     dashboardId: "", panelId: "", orgId: 1, refreshInterval: "off", theme: "dark", title: "",
   });
@@ -52,21 +50,22 @@ export function MonitoringGrafanaPanelWidget({ id }: { id: string }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    const key = `monitoring-config-${id}`;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(key);
       if (saved) {
         const parsed = JSON.parse(saved) as Config;
         if (parsed.dashboardId || parsed.panelId) setForm(parsed);
       }
     } catch {}
     setIsReady(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const isConfigured = form.dashboardId && String(form.panelId);
   const iframeUrl = isConfigured ? buildIframeUrl(form) : null;
 
   function handleSave() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch {}
+    try { localStorage.setItem(`monitoring-config-${id}`, JSON.stringify(form)); } catch {}
     setShowConfig(false);
     if (form.dashboardId && form.panelId) {
       setIsIframeLoading(true);

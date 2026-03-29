@@ -58,8 +58,6 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  const STORAGE_KEY = `grafana-config-${id}`;
-
   // Initialisation SSR-safe : état vide par défaut, puis lecture localStorage après montage
   const [form, setForm] = useState<GrafanaConfig>({
     dashboardId: (config.dashboardId as string) || "",
@@ -70,17 +68,19 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
     title: (config.title as string) || "",
   });
 
-  // Lecture localStorage uniquement côté client, après hydratation
+  // Lecture localStorage côté client uniquement — clé calculée dans l'effet pour éviter
+  // tout problème de closure si id change. Dépendance [id] pour réagir si le prop change.
   useEffect(() => {
+    const key = `grafana-config-${id}`;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(key);
       if (saved) {
         const parsed = JSON.parse(saved) as GrafanaConfig;
         if (parsed.dashboardId || parsed.panelId) setForm(parsed);
       }
     } catch {}
     setIsReady(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const isConfigured = form.dashboardId && String(form.panelId);
 
@@ -94,8 +94,8 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
 
   async function handleSave() {
     setIsSaving(true);
-    // Save to localStorage immediately for resilience
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch {}
+    // Save to localStorage immediately for resilience (key recalculated here, no closure risk)
+    try { localStorage.setItem(`grafana-config-${id}`, JSON.stringify(form)); } catch {}
     try {
       const res = await fetch(`/api/widgets/${id}`, {
         method: "PATCH",

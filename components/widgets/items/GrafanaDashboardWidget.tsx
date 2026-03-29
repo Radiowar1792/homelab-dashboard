@@ -27,8 +27,6 @@ function buildIframeUrl(cfg: Config): string {
 }
 
 export function GrafanaDashboardWidget({ id }: { id: string }) {
-  const STORAGE_KEY = `monitoring-config-${id}`;
-
   const [form, setForm] = useState<Config>({ dashboardId: "", orgId: 1, theme: "dark", title: "" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
@@ -37,21 +35,22 @@ export function GrafanaDashboardWidget({ id }: { id: string }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    const key = `monitoring-config-${id}`;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(key);
       if (saved) {
         const parsed = JSON.parse(saved) as Config;
         if (parsed.dashboardId) setForm(parsed);
       }
     } catch {}
     setIsReady(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const isConfigured = !!form.dashboardId;
   const iframeUrl = isConfigured ? buildIframeUrl(form) : null;
 
   function handleSave() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch {}
+    try { localStorage.setItem(`monitoring-config-${id}`, JSON.stringify(form)); } catch {}
     setShowConfig(false);
     if (form.dashboardId) {
       setIsIframeLoading(true);
