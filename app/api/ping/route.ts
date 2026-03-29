@@ -1,29 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import * as net from "net";
 
-// GET /api/ping?url=https://... — HTTP-based reachability check (avoids CORS from client)
-export async function GET(req: NextRequest) {
-  const url = req.nextUrl.searchParams.get("url");
-  if (!url) {
-    return NextResponse.json({ error: "url requis" }, { status: 400 });
-  }
-  const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      method: "HEAD",
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    clearTimeout(timeoutId);
-    const latency = Date.now() - start;
-    return NextResponse.json({ online: res.status < 500, latency });
-  } catch {
-    return NextResponse.json({ online: false, latency: null });
-  }
-}
-
 export async function POST(req: NextRequest) {
   let host: string;
   let port: number;
