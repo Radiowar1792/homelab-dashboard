@@ -98,6 +98,11 @@ function mergeLayout(
   const existingIds = new Set(current.map((l) => l.i));
   const validIds = new Set(visible.map((w) => w.id));
 
+  // Early return if layout is already in sync — avoids spurious re-renders
+  const allValid = current.every((l) => validIds.has(l.i));
+  const noNew = visible.every((w) => existingIds.has(w.id));
+  if (allValid && noNew) return current;
+
   // Garder uniquement les widgets qui existent encore
   const filtered = current.filter((l) => validIds.has(l.i));
 
