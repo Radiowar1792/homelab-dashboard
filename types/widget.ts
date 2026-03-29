@@ -31,6 +31,7 @@ export interface WidgetDefinition {
   icon: LucideIcon;
   defaultSize: WidgetSize;
   defaultConfig: Record<string, unknown>;
+  category: string;
   // Le composant est importé dynamiquement dans le registre
   componentPath: string;
 }

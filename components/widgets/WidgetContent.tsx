@@ -13,10 +13,7 @@ const loadingFallback = (
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
   "service-status": dynamic(
-    () =>
-      import("./items/ServiceStatusWidget").then(
-        (m) => m.ServiceStatusWidget
-      ),
+    () => import("./items/ServiceStatusWidget").then((m) => m.ServiceStatusWidget),
     { loading: () => loadingFallback }
   ),
   "rss-feed": dynamic(
@@ -32,15 +29,11 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     { loading: () => loadingFallback }
   ),
   "search-bar": dynamic(
-    () =>
-      import("./items/SearchBarWidget").then((m) => m.SearchBarWidget),
+    () => import("./items/SearchBarWidget").then((m) => m.SearchBarWidget),
     { loading: () => loadingFallback }
   ),
   "grafana-panel": dynamic(
-    () =>
-      import("./items/GrafanaPanelWidget").then(
-        (m) => m.GrafanaPanelWidget
-      ),
+    () => import("./items/GrafanaPanelWidget").then((m) => m.GrafanaPanelWidget),
     { loading: () => loadingFallback }
   ),
   weather: dynamic(
@@ -48,33 +41,51 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     { loading: () => loadingFallback }
   ),
   "quick-notes": dynamic(
-    () =>
-      import("./items/QuickNotesWidget").then((m) => m.QuickNotesWidget),
+    () => import("./items/QuickNotesWidget").then((m) => m.QuickNotesWidget),
     { loading: () => loadingFallback }
   ),
   "public-ip": dynamic(
-    () =>
-      import("./items/PublicIPWidget").then((m) => m.PublicIPWidget),
+    () => import("./items/PublicIPWidget").then((m) => m.PublicIPWidget),
     { loading: () => loadingFallback }
   ),
   "ping-monitor": dynamic(
-    () =>
-      import("./items/PingMonitorWidget").then((m) => m.PingMonitorWidget),
+    () => import("./items/PingMonitorWidget").then((m) => m.PingMonitorWidget),
     { loading: () => loadingFallback }
   ),
   shortcuts: dynamic(
-    () =>
-      import("./items/ShortcutsWidget").then((m) => m.ShortcutsWidget),
+    () => import("./items/ShortcutsWidget").then((m) => m.ShortcutsWidget),
     { loading: () => loadingFallback }
   ),
   calendar: dynamic(
-    () =>
-      import("./items/CalendarWidget").then((m) => m.CalendarWidget),
+    () => import("./items/CalendarWidget").then((m) => m.CalendarWidget),
     { loading: () => loadingFallback }
   ),
   pomodoro: dynamic(
-    () =>
-      import("./items/PomodoroWidget").then((m) => m.PomodoroWidget),
+    () => import("./items/PomodoroWidget").then((m) => m.PomodoroWidget),
+    { loading: () => loadingFallback }
+  ),
+  "system-stats": dynamic(
+    () => import("./items/SystemStatsWidget").then((m) => m.SystemStatsWidget),
+    { loading: () => loadingFallback }
+  ),
+  quote: dynamic(
+    () => import("./items/QuoteWidget").then((m) => m.QuoteWidget),
+    { loading: () => loadingFallback }
+  ),
+  "unit-converter": dynamic(
+    () => import("./items/UnitConverterWidget").then((m) => m.UnitConverterWidget),
+    { loading: () => loadingFallback }
+  ),
+  countdown: dynamic(
+    () => import("./items/CountdownWidget").then((m) => m.CountdownWidget),
+    { loading: () => loadingFallback }
+  ),
+  tasks: dynamic(
+    () => import("./items/TasksWidget").then((m) => m.TasksWidget),
+    { loading: () => loadingFallback }
+  ),
+  "github-activity": dynamic(
+    () => import("./items/GitHubActivityWidget").then((m) => m.GitHubActivityWidget),
     { loading: () => loadingFallback }
   ),
 };
