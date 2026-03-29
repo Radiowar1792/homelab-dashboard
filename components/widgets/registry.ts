@@ -2,7 +2,6 @@ import {
   Activity,
   Rss,
   Bot,
-  Home,
   Clock,
   Search,
   BarChart2,
@@ -43,15 +42,6 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     defaultSize: "large",
     defaultConfig: { model: "" },
     componentPath: "LLMChatWidget",
-  },
-  {
-    type: "home-assistant",
-    label: "Home Assistant",
-    description: "Contrôlez vos entités Home Assistant",
-    icon: Home,
-    defaultSize: "medium",
-    defaultConfig: { entities: [] },
-    componentPath: "HomeAssistantWidget",
   },
   {
     type: "clock",

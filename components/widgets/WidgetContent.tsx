@@ -27,13 +27,6 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
     () => import("./items/LLMChatWidget").then((m) => m.LLMChatWidget),
     { loading: () => loadingFallback }
   ),
-  "home-assistant": dynamic(
-    () =>
-      import("./items/HomeAssistantWidget").then(
-        (m) => m.HomeAssistantWidget
-      ),
-    { loading: () => loadingFallback }
-  ),
   clock: dynamic(
     () => import("./items/ClockWidget").then((m) => m.ClockWidget),
     { loading: () => loadingFallback }
