@@ -34,23 +34,6 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
       ),
     { loading: () => loadingFallback }
   ),
-  "vikunja-tasks": dynamic(
-    () => import("./items/VikunjaWidget").then((m) => m.VikunjaWidget),
-    { loading: () => loadingFallback }
-  ),
-  "n8n-workflows": dynamic(
-    () => import("./items/N8NWidget").then((m) => m.N8NWidget),
-    { loading: () => loadingFallback }
-  ),
-  docmost: dynamic(
-    () => import("./items/DocmostWidget").then((m) => m.DocmostWidget),
-    { loading: () => loadingFallback }
-  ),
-  "actual-budget": dynamic(
-    () =>
-      import("./items/ActualBudgetWidget").then((m) => m.ActualBudgetWidget),
-    { loading: () => loadingFallback }
-  ),
   clock: dynamic(
     () => import("./items/ClockWidget").then((m) => m.ClockWidget),
     { loading: () => loadingFallback }
