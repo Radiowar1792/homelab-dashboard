@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { GridLayout, verticalCompactor } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, Check } from "lucide-react";
+import { Plus, Pencil, Check, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WidgetWrapper } from "./WidgetWrapper";
 import { AddWidgetDialog } from "./AddWidgetDialog";
@@ -133,10 +133,8 @@ export function DashboardGrid() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [layout, setLayout] = useState<LayoutItem[]>([]);
-  // layoutReady = true uniquement après chargement depuis localStorage.
-  // On n'affiche GridLayout qu'à ce moment pour éviter qu'il
-  // appelle onLayoutChange avec un layout vide et écrase la sauvegarde.
   const [layoutReady, setLayoutReady] = useState(false);
+  const [resizingItem, setResizingItem] = useState<{ id: string; w: number; h: number } | null>(null);
   const initializedRef = useRef(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -238,10 +236,27 @@ export function DashboardGrid() {
   const resizeConfig = useMemo(
     () => ({
       enabled: isEditMode,
-      handles: ["se"] as ["se"],
+      handles: ["s", "w", "e", "n", "sw", "nw", "se", "ne"] as Array<"s" | "w" | "e" | "n" | "sw" | "nw" | "se" | "ne">,
     }),
     [isEditMode]
   );
+
+  const handleResizeStart = useCallback((_layout: Layout, item: LayoutItem | null) => {
+    if (!item) return;
+    setResizingItem({ id: item.i, w: item.w, h: item.h });
+  }, []);
+
+  const handleResize = useCallback((_layout: Layout, item: LayoutItem | null) => {
+    if (!item) return;
+    setResizingItem({ id: item.i, w: item.w, h: item.h });
+  }, []);
+
+  const handleResizeStop = useCallback((newLayout: Layout) => {
+    setResizingItem(null);
+    const mutable = [...newLayout] as LayoutItem[];
+    setLayout(mutable);
+    saveLayout(mutable);
+  }, []);
 
   const showSkeleton = isLoading || !layoutReady;
 
@@ -318,10 +333,19 @@ export function DashboardGrid() {
             resizeConfig={resizeConfig}
             compactor={verticalCompactor}
             onLayoutChange={handleLayoutChange}
+            onResizeStart={handleResizeStart}
+            onResize={handleResize}
+            onResizeStop={handleResizeStop}
           >
             {visibleWidgets.map((widget) => (
               <div key={widget.id} className="overflow-hidden rounded-xl">
                 <WidgetWrapper widget={widget} isEditMode={isEditMode} />
+                {resizingItem?.id === widget.id && (
+                  <div className="pointer-events-none absolute bottom-7 right-2 z-20 flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-xs text-white">
+                    <Move className="h-3 w-3" />
+                    {resizingItem.w} × {resizingItem.h}
+                  </div>
+                )}
               </div>
             ))}
           </GridLayout>
