@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
+import { siBrave } from "simple-icons";
 import type { WidgetProps } from "@/types";
 
 type SearchEngine = "brave" | "google" | "duckduckgo" | "searxng";
@@ -27,11 +28,14 @@ const ENGINE_LABELS: Record<SearchEngine, string> = {
 };
 
 function BraveLogo() {
+  // Official Brave logo via simple-icons (inline SVG, no external dependency)
   return (
-    <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M16 2L6 6.5V18c0 5.5 4.5 10 10 12 5.5-2 10-6.5 10-12V6.5L16 2Z" fill="#FB542B"/>
-      <path d="M20.5 11.5L19 10l-3 3-3-3-1.5 1.5 3 3-3 3 1.5 1.5 3-3 3 3 1.5-1.5-3-3 3-3Z" fill="white" opacity="0.9"/>
-    </svg>
+    <span
+      style={{ width: 20, height: 20, color: `#${siBrave.hex}` }}
+      className="inline-flex shrink-0 [&>svg]:h-full [&>svg]:w-full [&>svg]:fill-current"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: siBrave.svg }}
+    />
   );
 }
 
