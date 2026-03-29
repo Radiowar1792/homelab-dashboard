@@ -13,12 +13,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Server,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/services", label: "Services", icon: Activity },
+  { href: "/monitoring", label: "Monitoring", icon: BarChart2 },
   { href: "/rss", label: "Flux RSS", icon: Rss },
   { href: "/llm", label: "LLM Chat", icon: Bot },
 ];
