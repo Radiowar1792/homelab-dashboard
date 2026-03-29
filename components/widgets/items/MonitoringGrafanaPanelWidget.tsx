@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RefreshCw, ExternalLink, BarChart2, Settings2 } from "lucide-react";
 
 const GRAFANA_BASE_URL = "http://172.16.10.154:3000";
@@ -42,18 +42,25 @@ function buildIframeUrl(cfg: Config): string {
 export function MonitoringGrafanaPanelWidget({ id }: { id: string }) {
   const STORAGE_KEY = `monitoring-config-${id}`;
 
-  const [form, setForm] = useState<Config>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as Config;
-    } catch {}
-    return { dashboardId: "", panelId: "", orgId: 1, refreshInterval: "off", theme: "dark", title: "" };
+  const [form, setForm] = useState<Config>({
+    dashboardId: "", panelId: "", orgId: 1, refreshInterval: "off", theme: "dark", title: "",
   });
-
   const [refreshKey, setRefreshKey] = useState(0);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Config;
+        if (parsed.dashboardId || parsed.panelId) setForm(parsed);
+      }
+    } catch {}
+    setIsReady(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isConfigured = form.dashboardId && String(form.panelId);
   const iframeUrl = isConfigured ? buildIframeUrl(form) : null;
@@ -72,6 +79,14 @@ export function MonitoringGrafanaPanelWidget({ id }: { id: string }) {
     setRefreshKey((k) => k + 1);
     setIsIframeLoading(true);
     setHasError(false);
+  }
+
+  if (!isReady) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
   }
 
   if (showConfig || !isConfigured) {

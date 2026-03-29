@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RefreshCw,
   ExternalLink,
@@ -56,27 +56,31 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
   const [hasError, setHasError] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   const STORAGE_KEY = `grafana-config-${id}`;
 
-  function buildDefaultForm(): GrafanaConfig {
+  // Initialisation SSR-safe : état vide par défaut, puis lecture localStorage après montage
+  const [form, setForm] = useState<GrafanaConfig>({
+    dashboardId: (config.dashboardId as string) || "",
+    panelId: (config.panelId as string) || "",
+    orgId: (config.orgId as number) || 1,
+    refreshInterval: (config.refreshInterval as string) || "off",
+    theme: (config.theme as string) || "dark",
+    title: (config.title as string) || "",
+  });
+
+  // Lecture localStorage uniquement côté client, après hydratation
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as GrafanaConfig;
+      if (saved) {
+        const parsed = JSON.parse(saved) as GrafanaConfig;
+        if (parsed.dashboardId || parsed.panelId) setForm(parsed);
+      }
     } catch {}
-    return {
-      dashboardId: (config.dashboardId as string) || "",
-      panelId: (config.panelId as string) || "",
-      orgId: (config.orgId as number) || 1,
-      refreshInterval: (config.refreshInterval as string) || "off",
-      theme: (config.theme as string) || "dark",
-      title: (config.title as string) || "",
-    };
-  }
-
-  // Formulaire local — initialisé depuis localStorage si disponible
-  const [form, setForm] = useState<GrafanaConfig>(buildDefaultForm);
-
+    setIsReady(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isConfigured = form.dashboardId && String(form.panelId);
 
@@ -112,6 +116,15 @@ export function GrafanaPanelWidget({ id, config }: WidgetProps) {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  // Attente de l'hydratation pour éviter le flash "config form" → iframe
+  if (!isReady) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
   }
 
   // Formulaire de configuration
