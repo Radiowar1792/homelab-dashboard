@@ -4,26 +4,27 @@
 
 /* Variables de thème — mode clair */
 :root {
-  --background: 0 0% 100%;
+  --background: 216 20% 95%;     /* #f0f2f5 — fond principal adouci */
   --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
+  --card: 216 12% 92%;           /* #e8eaed — fond cards/widgets */
   --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
+  --popover: 216 12% 92%;
   --popover-foreground: 222.2 84% 4.9%;
   --primary: 221.2 83.2% 53.3%;
   --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
+  --secondary: 216 15% 88%;
   --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
+  --muted: 216 15% 88%;
   --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
+  --accent: 216 15% 88%;
   --accent-foreground: 222.2 47.4% 11.2%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
+  --border: 216 17% 84%;
+  --input: 216 17% 84%;
   --ring: 221.2 83.2% 53.3%;
   --radius: 0.5rem;
+  --sidebar-background: 216 17% 89%;  /* #dde1e7 — fond sidebar */
 
   --accent-custom: 221.2 83.2% 53.3%;
 }
@@ -75,7 +76,7 @@ body {
 
 /* Glassmorphism — s'adapte au thème */
 .glass {
-  background: rgba(255, 255, 255, 0.7);
+  background: hsl(var(--card) / 0.8);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(0, 0, 0, 0.06);

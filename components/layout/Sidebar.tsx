@@ -51,7 +51,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <motion.aside
       animate={{ width: collapsed ? 64 : 240 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative flex h-screen shrink-0 flex-col border-r border-border bg-card"
+      className="relative flex h-screen shrink-0 flex-col border-r border-border bg-[hsl(var(--sidebar-background))]"
     >
       {/* Logo */}
       <div className="flex h-14 items-center border-b border-border px-4">
