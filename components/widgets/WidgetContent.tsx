@@ -69,6 +69,21 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType<WidgetProps>> = {
       import("./items/PingMonitorWidget").then((m) => m.PingMonitorWidget),
     { loading: () => loadingFallback }
   ),
+  shortcuts: dynamic(
+    () =>
+      import("./items/ShortcutsWidget").then((m) => m.ShortcutsWidget),
+    { loading: () => loadingFallback }
+  ),
+  calendar: dynamic(
+    () =>
+      import("./items/CalendarWidget").then((m) => m.CalendarWidget),
+    { loading: () => loadingFallback }
+  ),
+  pomodoro: dynamic(
+    () =>
+      import("./items/PomodoroWidget").then((m) => m.PomodoroWidget),
+    { loading: () => loadingFallback }
+  ),
 };
 
 interface WidgetContentProps {

@@ -10,6 +10,9 @@ import {
   StickyNote,
   Globe,
   Radio,
+  Link,
+  CalendarDays,
+  Timer,
 } from "lucide-react";
 import type { WidgetDefinition } from "@/types";
 
@@ -120,6 +123,33 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     defaultSize: "medium",
     defaultConfig: { refreshInterval: 30 },
     componentPath: "PingMonitorWidget",
+  },
+  {
+    type: "shortcuts",
+    label: "Raccourcis",
+    description: "Liste de liens rapides avec emoji et nom",
+    icon: Link,
+    defaultSize: "small",
+    defaultConfig: {},
+    componentPath: "ShortcutsWidget",
+  },
+  {
+    type: "calendar",
+    label: "Calendrier",
+    description: "Vue mensuelle avec mise en évidence d'aujourd'hui",
+    icon: CalendarDays,
+    defaultSize: "small",
+    defaultConfig: {},
+    componentPath: "CalendarWidget",
+  },
+  {
+    type: "pomodoro",
+    label: "Pomodoro",
+    description: "Minuteur Pomodoro 25/5 min avec bague de progression",
+    icon: Timer,
+    defaultSize: "small",
+    defaultConfig: {},
+    componentPath: "PomodoroWidget",
   },
 ];
 

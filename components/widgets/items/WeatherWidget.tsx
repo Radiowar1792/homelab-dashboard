@@ -1,135 +1,95 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { Wind, Droplets, Thermometer, MapPin } from "lucide-react";
 import type { WidgetProps } from "@/types";
 
-interface WeatherData {
-  main: {
-    temp: number;
-    feels_like: number;
-    humidity: number;
-  };
-  weather: Array<{ description: string; icon: string }>;
-  wind: { speed: number };
+interface GeoResult {
+  latitude: number;
+  longitude: number;
   name: string;
-  sys: { country: string };
+  country_code: string;
 }
 
-interface ForecastData {
-  list: Array<{
-    dt: number;
-    main: { temp_min: number; temp_max: number };
-    weather: Array<{ icon: string; description: string }>;
-  }>;
+interface OpenMeteoResponse {
+  current: {
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    weather_code: number;
+  };
+  daily: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    weather_code: number[];
+  };
 }
 
-function iconUrl(icon: string) {
-  return `https://openweathermap.org/img/wn/${icon}@2x.png`;
+function wmoLabel(code: number): string {
+  if (code === 0) return "Ciel dégagé";
+  if (code <= 3) return "Partiellement nuageux";
+  if (code <= 48) return "Brouillard";
+  if (code <= 57) return "Bruine";
+  if (code <= 67) return "Pluie";
+  if (code <= 77) return "Neige";
+  if (code <= 82) return "Averses";
+  if (code <= 86) return "Averses de neige";
+  return "Orage";
 }
 
-async function fetchWeather(
-  city: string,
-  units: string,
-  apiKey: string
-): Promise<WeatherData> {
-  const res = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=${units}&appid=${apiKey}&lang=fr`
-  );
-  if (!res.ok) throw new Error("Ville introuvable");
-  return res.json();
-}
-
-async function fetchForecast(
-  city: string,
-  units: string,
-  apiKey: string
-): Promise<ForecastData> {
-  const res = await fetch(
-    `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&units=${units}&cnt=24&appid=${apiKey}&lang=fr`
-  );
-  if (!res.ok) throw new Error("Prévisions indisponibles");
-  return res.json();
-}
-
-function getDailyForecasts(forecast: ForecastData) {
-  const days = new Map<
-    string,
-    { min: number; max: number; icon: string; desc: string }
-  >();
-  const today = new Date().toDateString();
-
-  for (const item of forecast.list) {
-    const date = new Date(item.dt * 1000);
-    const key = date.toDateString();
-    if (key === today) continue;
-
-    const firstWeather = item.weather[0];
-    if (!days.has(key)) {
-      days.set(key, {
-        min: item.main.temp_min,
-        max: item.main.temp_max,
-        icon: firstWeather?.icon ?? "01d",
-        desc: firstWeather?.description ?? "",
-      });
-    } else {
-      const d = days.get(key);
-      if (d) {
-        d.min = Math.min(d.min, item.main.temp_min);
-        d.max = Math.max(d.max, item.main.temp_max);
-      }
-    }
-  }
-
-  return Array.from(days.entries())
-    .slice(0, 3)
-    .map(([dateStr, data]) => ({ date: new Date(dateStr), ...data }));
+function wmoEmoji(code: number): string {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "⛅";
+  if (code <= 3) return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 57) return "🌦️";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "❄️";
+  if (code <= 82) return "🌦️";
+  if (code <= 86) return "🌨️";
+  return "⛈️";
 }
 
 const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
+async function fetchWeather(city: string, units: string): Promise<{ geo: GeoResult; weather: OpenMeteoResponse }> {
+  const geoRes = await fetch(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`
+  );
+  if (!geoRes.ok) throw new Error("Ville introuvable");
+  const geoData = (await geoRes.json()) as { results?: GeoResult[] };
+  const geo = geoData.results?.[0];
+  if (!geo) throw new Error("Ville introuvable");
+
+  const tempUnit = units === "metric" ? "celsius" : "fahrenheit";
+  const windUnit = units === "metric" ? "kmh" : "mph";
+  const weatherRes = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${geo.latitude}&longitude=${geo.longitude}` +
+    `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code` +
+    `&daily=temperature_2m_max,temperature_2m_min,weather_code` +
+    `&temperature_unit=${tempUnit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=4`
+  );
+  if (!weatherRes.ok) throw new Error("Météo indisponible");
+  const weather = (await weatherRes.json()) as OpenMeteoResponse;
+  return { geo, weather };
+}
+
 export function WeatherWidget({ config, size }: WidgetProps) {
   const city = (config.city as string) || "Paris";
   const units = (config.units as string) || "metric";
-  const apiKey =
-    (config.apiKey as string) ||
-    process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY ||
-    "";
   const unitSymbol = units === "metric" ? "°C" : "°F";
+  const speedUnit = units === "metric" ? "km/h" : "mph";
   const isCompact = size === "small";
 
-  const {
-    data: weather,
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ["weather", city, units, apiKey],
-    queryFn: () => fetchWeather(city, units, apiKey as string),
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["weather-openmeteo", city, units],
+    queryFn: () => fetchWeather(city, units),
     refetchInterval: 30 * 60 * 1000,
     staleTime: 15 * 60 * 1000,
-    enabled: !!apiKey && !!city,
+    enabled: !!city,
   });
-
-  const { data: forecast } = useQuery({
-    queryKey: ["weather-forecast", city, units, apiKey],
-    queryFn: () => fetchForecast(city, units, apiKey as string),
-    refetchInterval: 30 * 60 * 1000,
-    staleTime: 15 * 60 * 1000,
-    enabled: !!apiKey && !!city && !isCompact,
-  });
-
-  if (!apiKey) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
-        <Thermometer className="h-8 w-8" />
-        <p className="text-sm font-medium">Clé API manquante</p>
-        <code className="rounded bg-muted px-2 py-1 text-xs">
-          NEXT_PUBLIC_OPENWEATHER_API_KEY
-        </code>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -139,45 +99,45 @@ export function WeatherWidget({ config, size }: WidgetProps) {
     );
   }
 
-  if (error || !weather) {
+  if (error || !data) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-destructive">
-        Impossible de charger la météo
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
+        <Thermometer className="h-8 w-8" />
+        <p className="text-sm">Impossible de charger la météo</p>
+        <p className="text-xs">Vérifiez le nom de la ville</p>
       </div>
     );
   }
 
-  const dailyForecasts = forecast ? getDailyForecasts(forecast) : [];
-  const windSpeed =
-    units === "metric"
-      ? Math.round(weather.wind.speed * 3.6)
-      : Math.round(weather.wind.speed);
-  const speedUnit = units === "metric" ? "km/h" : "mph";
+  const { geo, weather } = data;
+  const current = weather.current;
+
+  // Next 3 days (skip today at index 0)
+  const forecasts = weather.daily.time.slice(1, 4).map((dateStr, i) => ({
+    date: new Date(dateStr),
+    max: weather.daily.temperature_2m_max[i + 1] ?? 0,
+    min: weather.daily.temperature_2m_min[i + 1] ?? 0,
+    code: weather.daily.weather_code[i + 1] ?? 0,
+  }));
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">
       {/* Localisation */}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <MapPin className="h-3 w-3" />
-        {weather.name}, {weather.sys.country}
+        {geo.name}, {geo.country_code.toUpperCase()}
       </div>
 
       {/* Météo actuelle */}
       <div className="flex items-center gap-3">
-        {weather.weather[0] && (
-          <img
-            src={iconUrl(weather.weather[0].icon)}
-            alt={weather.weather[0].description}
-            className="h-16 w-16 drop-shadow-md"
-          />
-        )}
+        <span className="text-5xl leading-none">{wmoEmoji(current.weather_code)}</span>
         <div>
           <div className="text-4xl font-bold">
-            {Math.round(weather.main.temp)}
+            {Math.round(current.temperature_2m)}
             {unitSymbol}
           </div>
           <div className="text-sm capitalize text-muted-foreground">
-            {weather.weather[0]?.description}
+            {wmoLabel(current.weather_code)}
           </div>
         </div>
       </div>
@@ -189,41 +149,27 @@ export function WeatherWidget({ config, size }: WidgetProps) {
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/40 p-2">
               <Thermometer className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Ressenti</span>
-              <span className="font-medium">
-                {Math.round(weather.main.feels_like)}
-                {unitSymbol}
-              </span>
+              <span className="font-medium">{Math.round(current.apparent_temperature)}{unitSymbol}</span>
             </div>
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/40 p-2">
               <Droplets className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Humidité</span>
-              <span className="font-medium">{weather.main.humidity}%</span>
+              <span className="font-medium">{current.relative_humidity_2m}%</span>
             </div>
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/40 p-2">
               <Wind className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Vent</span>
-              <span className="font-medium">
-                {windSpeed} {speedUnit}
-              </span>
+              <span className="font-medium">{Math.round(current.wind_speed_10m)} {speedUnit}</span>
             </div>
           </div>
 
           {/* Prévisions 3 jours */}
-          {dailyForecasts.length > 0 && (
+          {forecasts.length > 0 && (
             <div className="mt-auto grid grid-cols-3 gap-2 border-t border-border pt-2">
-              {dailyForecasts.map((day) => (
-                <div
-                  key={day.date.toISOString()}
-                  className="flex flex-col items-center gap-0.5 text-xs"
-                >
-                  <span className="font-medium">
-                    {DAY_NAMES[day.date.getDay()]}
-                  </span>
-                  <img
-                    src={iconUrl(day.icon)}
-                    alt={day.desc}
-                    className="h-8 w-8"
-                  />
+              {forecasts.map((day) => (
+                <div key={day.date.toISOString()} className="flex flex-col items-center gap-0.5 text-xs">
+                  <span className="font-medium">{DAY_NAMES[day.date.getDay()]}</span>
+                  <span className="text-xl leading-none">{wmoEmoji(day.code)}</span>
                   <span className="text-muted-foreground">
                     {Math.round(day.max)}° / {Math.round(day.min)}°
                   </span>
