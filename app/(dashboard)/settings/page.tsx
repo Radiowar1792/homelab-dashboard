@@ -1,16 +1,12 @@
 "use client";
 
 import * as Tabs from "@radix-ui/react-tabs";
-import { Globe, LayoutGrid, Palette, Plug } from "lucide-react";
+import { Globe, Palette } from "lucide-react";
 import { ServicesSection } from "@/components/settings/ServicesSection";
-import { WidgetsSection } from "@/components/settings/WidgetsSection";
 import { AppearanceSection } from "@/components/settings/AppearanceSection";
-import { IntegrationsSection } from "@/components/settings/IntegrationsSection";
 
 const TABS = [
   { value: "services", label: "Services", icon: Globe },
-  { value: "integrations", label: "Intégrations", icon: Plug },
-  { value: "widgets", label: "Widgets", icon: LayoutGrid },
   { value: "appearance", label: "Apparence", icon: Palette },
 ];
 
@@ -20,7 +16,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Paramètres</h1>
         <p className="text-sm text-muted-foreground">
-          Configuration du dashboard et des intégrations
+          Configuration du dashboard
         </p>
       </div>
 
@@ -40,14 +36,6 @@ export default function SettingsPage() {
 
         <Tabs.Content value="services">
           <ServicesSection />
-        </Tabs.Content>
-
-        <Tabs.Content value="integrations">
-          <IntegrationsSection />
-        </Tabs.Content>
-
-        <Tabs.Content value="widgets">
-          <WidgetsSection />
         </Tabs.Content>
 
         <Tabs.Content value="appearance">
