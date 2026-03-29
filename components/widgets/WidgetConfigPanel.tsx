@@ -219,6 +219,72 @@ function RSSConfigForm({
 
 // ─── Config form dispatcher ────────────────────────────────────────────────────
 
+// ─── Countdown config ──────────────────────────────────────────────────────────
+
+function CountdownConfigForm({ config, onChange }: { config: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Titre</label>
+        <input type="text" value={(config.title as string | undefined) ?? ""}
+          onChange={(e) => onChange("title", e.target.value)}
+          placeholder="Nom de l'événement"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Date cible</label>
+        <input type="datetime-local" value={(config.targetDate as string | undefined) ?? ""}
+          onChange={(e) => onChange("targetDate", e.target.value)}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+    </div>
+  );
+}
+
+// ─── GitHub activity config ───────────────────────────────────────────────────
+
+function GitHubActivityConfigForm({ config, onChange }: { config: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Nom d&apos;utilisateur GitHub</label>
+        <input type="text" value={(config.username as string | undefined) ?? ""}
+          onChange={(e) => onChange("username", e.target.value)}
+          placeholder="octocat"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Nombre d&apos;événements max</label>
+        <input type="number" min={1} max={30} value={(config.maxItems as number | undefined) ?? 8}
+          onChange={(e) => onChange("maxItems", parseInt(e.target.value))}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Quote config ─────────────────────────────────────────────────────────────
+
+function QuoteConfigForm({ config, onChange }: { config: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
+  const TAGS = ["inspirational", "life", "technology", "wisdom", "science", "business", "philosophy"];
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground">Thème</label>
+      <div className="flex flex-wrap gap-2">
+        {TAGS.map((tag) => (
+          <button key={tag} onClick={() => onChange("tags", tag)}
+            className={cn("rounded-full px-3 py-1 text-xs transition-colors",
+              (config.tags ?? "inspirational") === tag ? "bg-primary/10 text-primary ring-1 ring-primary" : "border border-border hover:bg-muted")}>
+            {tag}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Config form dispatcher ────────────────────────────────────────────────────
+
 function ConfigForm({
   type, config, onChange,
 }: {
@@ -230,6 +296,9 @@ function ConfigForm({
   if (type === "search-bar") return <SearchBarConfigForm config={config} onChange={onChange} />;
   if (type === "weather") return <WeatherConfigForm config={config} onChange={onChange} />;
   if (type === "rss-feed") return <RSSConfigForm config={config} onChange={onChange} />;
+  if (type === "countdown") return <CountdownConfigForm config={config} onChange={onChange} />;
+  if (type === "github-activity") return <GitHubActivityConfigForm config={config} onChange={onChange} />;
+  if (type === "quote") return <QuoteConfigForm config={config} onChange={onChange} />;
   return (
     <p className="text-sm text-muted-foreground">
       Ce widget ne dispose pas d&apos;options de configuration.
@@ -244,7 +313,9 @@ const WIDGET_LABELS: Record<string, string> = {
   "rss-feed": "Flux RSS", "quick-notes": "Notes rapides", "grafana-panel": "Panel Grafana",
   "service-status": "Status des services", "public-ip": "IP Publique",
   "ping-monitor": "Ping Monitor", shortcuts: "Raccourcis", calendar: "Calendrier",
-  pomodoro: "Pomodoro", "llm-chat": "LLM Chat",
+  pomodoro: "Pomodoro", "llm-chat": "LLM Chat", "system-stats": "Stats Système",
+  quote: "Citation du jour", "unit-converter": "Convertisseur", countdown: "Compte à rebours",
+  tasks: "Tâches rapides", "github-activity": "Activité GitHub",
 };
 
 interface WidgetConfigPanelProps {
@@ -288,7 +359,7 @@ export function WidgetConfigPanel({ widget, onClose }: WidgetConfigPanelProps) {
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-border bg-card shadow-2xl">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-border dialog-bg shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">

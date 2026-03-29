@@ -1,28 +1,26 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Server, Search, ChevronDown, Pencil, FolderPlus, Folder } from "lucide-react";
-import * as Dialog from "@radix-ui/react-dialog";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { GridLayout, verticalCompactor } from "react-grid-layout";
+import type { Layout, LayoutItem } from "react-grid-layout";
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  useDraggable,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+  Plus, X, Server, Search, ChevronDown, Pencil, FolderPlus,
+  Folder, Move, Check, GripVertical,
+} from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   siGrafana, siHomeassistant, siJellyfin, siNextcloud, siGitea,
   siSyncthing, siNginx, siN8n, siProxmox, siPortainer,
   siDocker, siPlex, siGitlab, siAdguard, siUptimekuma,
   siImmich, siVaultwarden, siAuthentik, siPaperlessngx,
 } from "simple-icons";
+import { cn } from "@/lib/utils";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SimpleIconDef { title: string; hex: string; svg: string }
 
@@ -52,8 +50,80 @@ interface Group {
   name: string;
 }
 
+// ─── Grid config ──────────────────────────────────────────────────────────────
+
+const COLS = 12;
+const ROW_HEIGHT = 80;
+const STORAGE_KEY = "services-grid-layout";
 const SERVICES_KEY = "homelab-launcher-services";
 const GROUPS_KEY = "homelab-launcher-groups";
+
+const DEFAULT_SVC = { w: 2, h: 2 };
+const DEFAULT_GRP = { w: 6, h: 3 };
+
+// ─── Layout helpers ───────────────────────────────────────────────────────────
+
+function buildDefaultLayout(itemIds: string[]): LayoutItem[] {
+  let x = 0, y = 0, rowMaxH = 0;
+  return itemIds.map((id) => {
+    const size = id.startsWith("grp-") ? DEFAULT_GRP : DEFAULT_SVC;
+    if (x + size.w > COLS) { x = 0; y += rowMaxH; rowMaxH = 0; }
+    const item: LayoutItem = { i: id, x, y, w: size.w, h: size.h };
+    x += size.w; rowMaxH = Math.max(rowMaxH, size.h);
+    return item;
+  });
+}
+
+function loadLayoutFromStorage(itemIds: string[]): LayoutItem[] {
+  if (typeof window === "undefined") return buildDefaultLayout(itemIds);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return buildDefaultLayout(itemIds);
+    const saved = JSON.parse(raw) as LayoutItem[];
+    const savedMap = new Map(saved.map((l) => [l.i, l]));
+    const validIdSet = new Set(itemIds);
+    const filteredSaved = saved.filter((l) => validIdSet.has(l.i));
+    const unsaved = itemIds.filter((id) => !savedMap.has(id));
+    if (unsaved.length === 0) return filteredSaved;
+    const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+    let x = 0;
+    const extra = unsaved.map((id) => {
+      const size = id.startsWith("grp-") ? DEFAULT_GRP : DEFAULT_SVC;
+      if (x + size.w > COLS) x = 0;
+      const item: LayoutItem = { i: id, x, y: maxY, w: size.w, h: size.h };
+      x += size.w;
+      return item;
+    });
+    return [...filteredSaved, ...extra];
+  } catch {
+    return buildDefaultLayout(itemIds);
+  }
+}
+
+function mergeLayout(current: LayoutItem[], itemIds: string[]): LayoutItem[] {
+  const existingIds = new Set(current.map((l) => l.i));
+  const validIds = new Set(itemIds);
+  const allValid = current.every((l) => validIds.has(l.i));
+  const noNew = itemIds.every((id) => existingIds.has(id));
+  if (allValid && noNew) return current;
+  const filtered = current.filter((l) => validIds.has(l.i));
+  const newIds = itemIds.filter((id) => !existingIds.has(id));
+  if (newIds.length === 0) return filtered;
+  const maxY = filtered.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+  let x = 0;
+  const extra = newIds.map((id) => {
+    const size = id.startsWith("grp-") ? DEFAULT_GRP : DEFAULT_SVC;
+    if (x + size.w > COLS) x = 0;
+    const item: LayoutItem = { i: id, x, y: maxY, w: size.w, h: size.h };
+    x += size.w;
+    return item;
+  });
+  return [...filtered, ...extra];
+}
+
+function saveLayout(items: LayoutItem[]) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
+}
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
 
@@ -62,13 +132,14 @@ const AVATAR_COLORS = [
   "#f59e0b", "#10b981", "#3b82f6", "#ef4444",
   "#f97316", "#06b6d4",
 ];
+
 function getAvatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0x7fffffff;
   return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? "#6366f1";
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Icon components ──────────────────────────────────────────────────────────
 
 function GalleryIcon({ icon, size = 40 }: { icon: SimpleIconDef; size?: number }) {
   const colored = icon.svg.replace("<svg ", `<svg fill="#${icon.hex}" `);
@@ -78,13 +149,16 @@ function GalleryIcon({ icon, size = 40 }: { icon: SimpleIconDef; size?: number }
   );
 }
 
-function ServiceLogo({ service }: { service: Service }) {
+function ServiceLogo({ service, compact = false }: { service: Service; compact?: boolean }) {
   const [faviconFailed, setFaviconFailed] = useState(false);
+  const iconSize = compact ? 24 : 32;
+  const containerCls = compact ? "h-9 w-9" : "h-11 w-11";
   const galleryEntry = service.iconTitle ? GALLERY.find((g) => g.name === service.iconTitle) : null;
+
   if (galleryEntry) {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-background p-2">
-        <GalleryIcon icon={galleryEntry.icon} size={40} />
+      <div className={`flex ${containerCls} items-center justify-center rounded-lg bg-background p-1.5`}>
+        <GalleryIcon icon={galleryEntry.icon} size={iconSize} />
       </div>
     );
   }
@@ -92,190 +166,28 @@ function ServiceLogo({ service }: { service: Service }) {
   const faviconUrl = origin ? `${origin}/favicon.ico` : null;
   if (!faviconUrl || faviconFailed) {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-xl text-2xl font-bold text-white"
+      <div className={`flex ${containerCls} items-center justify-center rounded-lg text-sm font-bold text-white`}
         style={{ background: getAvatarColor(service.name) }}>
         {service.name.charAt(0).toUpperCase()}
       </div>
     );
   }
   return (
-    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-background">
-      <img src={faviconUrl} alt={service.name} className="h-10 w-10 object-contain"
+    <div className={`flex ${containerCls} items-center justify-center rounded-lg bg-background`}>
+      <img src={faviconUrl} alt={service.name} className="h-6 w-6 object-contain"
         onError={() => setFaviconFailed(true)} />
-    </div>
-  );
-}
-
-// Small version used inside groups
-function ServiceLogoSmall({ service }: { service: Service }) {
-  const [faviconFailed, setFaviconFailed] = useState(false);
-  const galleryEntry = service.iconTitle ? GALLERY.find((g) => g.name === service.iconTitle) : null;
-  if (galleryEntry) {
-    return (
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background p-1.5">
-        <GalleryIcon icon={galleryEntry.icon} size={28} />
-      </div>
-    );
-  }
-  const origin = (() => { try { return new URL(service.url).origin; } catch { return null; } })();
-  const faviconUrl = origin ? `${origin}/favicon.ico` : null;
-  if (!faviconUrl || faviconFailed) {
-    return (
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold text-white"
-        style={{ background: getAvatarColor(service.name) }}>
-        {service.name.charAt(0).toUpperCase()}
-      </div>
-    );
-  }
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background">
-      <img src={faviconUrl} alt={service.name} className="h-7 w-7 object-contain"
-        onError={() => setFaviconFailed(true)} />
-    </div>
-  );
-}
-
-// ─── Draggable service tile ───────────────────────────────────────────────────
-
-function DraggableServiceTile({
-  service, onEdit, onDelete, compact = false,
-}: {
-  service: Service;
-  onEdit: (s: Service) => void;
-  onDelete: (id: string) => void;
-  compact?: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: service.id });
-
-  if (compact) {
-    return (
-      <div ref={setNodeRef} {...attributes} {...listeners}
-        className={`group relative cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}>
-        <a href={service.url} target="_blank" rel="noopener noreferrer"
-          onClick={(e) => isDragging && e.preventDefault()}
-          className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-card p-3 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md">
-          <ServiceLogoSmall service={service} />
-          <span className="w-full truncate text-center text-[10px] font-medium text-foreground">{service.name}</span>
-        </a>
-        <div className="absolute -right-1 -top-1 hidden gap-0.5 group-hover:flex">
-          <button onClick={(e) => { e.preventDefault(); onEdit(service); }}
-            className="rounded-full bg-card border border-border p-0.5 text-muted-foreground shadow hover:text-primary">
-            <Pencil className="h-2.5 w-2.5" />
-          </button>
-          <button onClick={(e) => { e.preventDefault(); onDelete(service.id); }}
-            className="rounded-full bg-destructive p-0.5 text-destructive-foreground shadow">
-            <X className="h-2.5 w-2.5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={setNodeRef} {...attributes} {...listeners}
-      className={`group relative cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}>
-      <a href={service.url} target="_blank" rel="noopener noreferrer"
-        onClick={(e) => isDragging && e.preventDefault()}
-        className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md">
-        <ServiceLogo service={service} />
-        <span className="w-full truncate text-center text-xs font-medium text-foreground">{service.name}</span>
-      </a>
-      <div className="absolute -right-1.5 -top-1.5 hidden gap-1 group-hover:flex">
-        <button onClick={(e) => { e.preventDefault(); onEdit(service); }}
-          className="rounded-full bg-card border border-border p-0.5 text-muted-foreground shadow hover:text-primary">
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button onClick={(e) => { e.preventDefault(); onDelete(service.id); }}
-          className="rounded-full bg-destructive p-0.5 text-destructive-foreground shadow-md">
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Droppable group card ─────────────────────────────────────────────────────
-
-function DroppableGroup({
-  group, services, onEdit, onDelete, onRenameGroup, onDeleteGroup,
-}: {
-  group: Group;
-  services: Service[];
-  onEdit: (s: Service) => void;
-  onDelete: (id: string) => void;
-  onRenameGroup: (id: string, name: string) => void;
-  onDeleteGroup: (id: string) => void;
-}) {
-  const { isOver, setNodeRef } = useDroppable({ id: `group:${group.id}` });
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftName, setDraftName] = useState(group.name);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
-
-  function commitRename() {
-    const trimmed = draftName.trim();
-    if (trimmed) onRenameGroup(group.id, trimmed);
-    else setDraftName(group.name);
-    setIsEditing(false);
-  }
-
-  return (
-    <div className="space-y-2">
-      {/* Group header */}
-      <div className="flex items-center gap-2">
-        <Folder className="h-4 w-4 text-primary" />
-        {isEditing ? (
-          <input ref={inputRef} value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { setDraftName(group.name); setIsEditing(false); } }}
-            className="flex-1 rounded border border-primary bg-background px-2 py-0.5 text-sm font-semibold outline-none" />
-        ) : (
-          <button onClick={() => setIsEditing(true)}
-            className="flex-1 text-left text-sm font-semibold text-foreground hover:text-primary">
-            {group.name}
-          </button>
-        )}
-        <button onClick={() => onDeleteGroup(group.id)}
-          className="rounded p-0.5 text-muted-foreground hover:text-destructive" title="Supprimer le groupe">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Drop zone */}
-      <div ref={setNodeRef}
-        className={`min-h-24 rounded-2xl border-2 border-dashed p-3 transition-colors ${
-          isOver ? "border-primary bg-primary/5" : "border-border bg-card/50"
-        }`}>
-        {services.length === 0 ? (
-          <div className="flex h-16 items-center justify-center text-xs text-muted-foreground">
-            Glissez des services ici
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
-            {services.map((s) => (
-              <DraggableServiceTile key={s.id} service={s} onEdit={onEdit} onDelete={onDelete} compact />
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
 // ─── Logo picker ──────────────────────────────────────────────────────────────
 
-function LogoPicker({
-  value, onChange,
-}: { value: string | null; onChange: (v: string | null) => void }) {
+function LogoPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   const [showGallery, setShowGallery] = useState(false);
   const [gallerySearch, setGallerySearch] = useState("");
-
   const filtered = gallerySearch.trim()
     ? GALLERY.filter((g) => g.name.toLowerCase().includes(gallerySearch.toLowerCase()))
     : GALLERY;
-
   const selected = value ? GALLERY.find((g) => g.name === value) : null;
 
   return (
@@ -292,7 +204,6 @@ function LogoPicker({
         </span>
         <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showGallery ? "rotate-180" : ""}`} />
       </button>
-
       {showGallery && (
         <div className="mt-2 rounded-lg border border-border bg-background p-3">
           <div className="relative mb-3">
@@ -311,7 +222,7 @@ function LogoPicker({
                 onClick={() => { onChange(entry.name); setShowGallery(false); }}
                 title={entry.name}
                 className={`flex flex-col items-center gap-1 rounded-lg p-2 transition-colors ${value === entry.name ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted"}`}>
-                <GalleryIcon icon={entry.icon} size={24} />
+                <GalleryIcon icon={entry.icon} size={22} />
                 <span className="w-full truncate text-center text-[9px] text-muted-foreground">{entry.name}</span>
               </button>
             ))}
@@ -325,14 +236,235 @@ function LogoPicker({
   );
 }
 
-// ─── Droppable ungrouped area ─────────────────────────────────────────────────
+// ─── Service tile (inside group) ──────────────────────────────────────────────
 
-function DroppableUngrouped({ children }: { children: React.ReactNode }) {
-  const { isOver, setNodeRef } = useDroppable({ id: "ungrouped" });
+function ServiceTileCompact({
+  service, isEditMode, groups, onEdit, onDelete, onMoveToGroup,
+}: {
+  service: Service; isEditMode: boolean; groups: Group[];
+  onEdit: (s: Service) => void; onDelete: (id: string) => void;
+  onMoveToGroup: (serviceId: string, groupId: string | undefined) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+
   return (
-    <div ref={setNodeRef}
-      className={`min-h-20 rounded-xl transition-colors ${isOver ? "ring-2 ring-primary/30 bg-primary/5" : ""}`}>
-      {children}
+    <div className="group relative">
+      <a href={service.url} target="_blank" rel="noopener noreferrer"
+        className={cn(
+          "flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2 transition-all",
+          !isEditMode && "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+        )}>
+        <ServiceLogo service={service} compact />
+        <span className="w-full truncate text-center text-[10px] font-medium text-foreground">{service.name}</span>
+      </a>
+      {isEditMode && (
+        <div className="absolute -right-1 -top-1 flex gap-0.5">
+          <div className="relative">
+            <button onClick={() => setShowMenu((v) => !v)}
+              className="rounded-full bg-card border border-border p-0.5 text-muted-foreground shadow hover:text-primary">
+              <Folder className="h-2.5 w-2.5" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-full z-30 mt-1 min-w-28 rounded-lg border border-border dialog-bg shadow-lg">
+                <button onClick={() => { onMoveToGroup(service.id, undefined); setShowMenu(false); }}
+                  className={cn("w-full px-3 py-1.5 text-left text-[10px] hover:bg-muted rounded-t-lg", !service.groupId && "text-primary font-medium")}>
+                  Sans groupe
+                </button>
+                {groups.map((g) => (
+                  <button key={g.id} onClick={() => { onMoveToGroup(service.id, g.id); setShowMenu(false); }}
+                    className={cn("w-full px-3 py-1.5 text-left text-[10px] hover:bg-muted last:rounded-b-lg", service.groupId === g.id && "text-primary font-medium")}>
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => onEdit(service)}
+            className="rounded-full bg-card border border-border p-0.5 text-muted-foreground shadow hover:text-primary">
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+          <button onClick={() => onDelete(service.id)}
+            className="rounded-full bg-destructive p-0.5 text-destructive-foreground shadow">
+            <X className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Service grid item ────────────────────────────────────────────────────────
+
+function ServiceGridItem({
+  service, isEditMode, groups, layoutItem, onEdit, onDelete, onMoveToGroup, onDimensionChange,
+}: {
+  service: Service; isEditMode: boolean; groups: Group[];
+  layoutItem: LayoutItem | undefined;
+  onEdit: (s: Service) => void; onDelete: (id: string) => void;
+  onMoveToGroup: (serviceId: string, groupId: string | undefined) => void;
+  onDimensionChange: (id: string, dim: "w" | "h", v: number) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const itemId = `svc-${service.id}`;
+
+  return (
+    <div className={cn(
+      "relative h-full w-full overflow-hidden rounded-xl border border-border bg-card transition-all",
+      isEditMode && "ring-1 ring-dashed ring-primary/50"
+    )}>
+      {isEditMode && (
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-border bg-muted/80 px-2 py-1 backdrop-blur-sm">
+          <button className="drag-handle cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing">
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex items-center gap-1">
+            {layoutItem && (
+              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground"
+                onMouseDown={(e) => e.stopPropagation()}>
+                <span>w</span>
+                <input type="number" min={1} max={COLS} value={layoutItem.w}
+                  onChange={(e) => onDimensionChange(itemId, "w", parseInt(e.target.value) || 1)}
+                  className="w-7 rounded border border-border bg-background px-1 py-0 text-center text-[10px] outline-none focus:ring-1 focus:ring-primary" />
+                <span>h</span>
+                <input type="number" min={1} max={20} value={layoutItem.h}
+                  onChange={(e) => onDimensionChange(itemId, "h", parseInt(e.target.value) || 1)}
+                  className="w-7 rounded border border-border bg-background px-1 py-0 text-center text-[10px] outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            )}
+            <div className="relative">
+              <button onClick={() => setShowMenu((v) => !v)}
+                className="rounded p-0.5 text-muted-foreground hover:text-primary" title="Groupe">
+                <Folder className="h-3 w-3" />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-32 rounded-lg border border-border dialog-bg shadow-lg">
+                  <button onClick={() => { onMoveToGroup(service.id, undefined); setShowMenu(false); }}
+                    className={cn("w-full px-3 py-1.5 text-left text-xs hover:bg-muted rounded-t-lg", !service.groupId && "text-primary font-medium")}>
+                    Sans groupe
+                  </button>
+                  {groups.map((g) => (
+                    <button key={g.id} onClick={() => { onMoveToGroup(service.id, g.id); setShowMenu(false); }}
+                      className={cn("w-full px-3 py-1.5 text-left text-xs hover:bg-muted last:rounded-b-lg", service.groupId === g.id && "text-primary font-medium")}>
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={() => onEdit(service)}
+              className="rounded p-0.5 text-muted-foreground hover:text-primary">
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button onClick={() => onDelete(service.id)}
+              className="text-muted-foreground hover:text-destructive">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+      <a href={service.url} target="_blank" rel="noopener noreferrer"
+        className={cn(
+          "flex h-full flex-col items-center justify-center gap-2 p-3 transition-all",
+          !isEditMode && "hover:bg-accent/30",
+          isEditMode && "pointer-events-none pt-9"
+        )}>
+        <ServiceLogo service={service} />
+        <span className="w-full truncate text-center text-xs font-medium text-foreground">{service.name}</span>
+      </a>
+    </div>
+  );
+}
+
+// ─── Group grid item ──────────────────────────────────────────────────────────
+
+function GroupGridItem({
+  group, services, isEditMode, groups, layoutItem, onEdit, onDelete, onMoveToGroup,
+  onRenameGroup, onDeleteGroup, onDimensionChange,
+}: {
+  group: Group; services: Service[]; isEditMode: boolean; groups: Group[];
+  layoutItem: LayoutItem | undefined;
+  onEdit: (s: Service) => void; onDelete: (id: string) => void;
+  onMoveToGroup: (serviceId: string, groupId: string | undefined) => void;
+  onRenameGroup: (id: string, name: string) => void; onDeleteGroup: (id: string) => void;
+  onDimensionChange: (id: string, dim: "w" | "h", v: number) => void;
+}) {
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(group.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const itemId = `grp-${group.id}`;
+
+  useEffect(() => { if (isRenaming) inputRef.current?.focus(); }, [isRenaming]);
+
+  function commitRename() {
+    const trimmed = draftName.trim();
+    if (trimmed) onRenameGroup(group.id, trimmed);
+    else setDraftName(group.name);
+    setIsRenaming(false);
+  }
+
+  return (
+    <div className={cn(
+      "relative h-full w-full overflow-hidden rounded-xl border border-border bg-card transition-all",
+      isEditMode && "ring-1 ring-dashed ring-primary/50"
+    )}>
+      {isEditMode && (
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-border bg-muted/80 px-2 py-1 backdrop-blur-sm">
+          <button className="drag-handle cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing">
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex items-center gap-1">
+            {layoutItem && (
+              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground"
+                onMouseDown={(e) => e.stopPropagation()}>
+                <span>w</span>
+                <input type="number" min={1} max={COLS} value={layoutItem.w}
+                  onChange={(e) => onDimensionChange(itemId, "w", parseInt(e.target.value) || 1)}
+                  className="w-7 rounded border border-border bg-background px-1 py-0 text-center text-[10px] outline-none focus:ring-1 focus:ring-primary" />
+                <span>h</span>
+                <input type="number" min={1} max={20} value={layoutItem.h}
+                  onChange={(e) => onDimensionChange(itemId, "h", parseInt(e.target.value) || 1)}
+                  className="w-7 rounded border border-border bg-background px-1 py-0 text-center text-[10px] outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            )}
+            <button onClick={() => onDeleteGroup(group.id)}
+              className="text-muted-foreground hover:text-destructive">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+      <div className={cn("h-full overflow-auto p-3", isEditMode && "pt-9")}>
+        <div className="mb-2 flex items-center gap-1.5">
+          <Folder className="h-3.5 w-3.5 shrink-0 text-primary" />
+          {isRenaming ? (
+            <input ref={inputRef} value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") { setDraftName(group.name); setIsRenaming(false); }
+              }}
+              className="flex-1 rounded border border-primary bg-background px-2 py-0.5 text-xs font-semibold outline-none" />
+          ) : (
+            <button onClick={() => isEditMode && setIsRenaming(true)}
+              className={cn("flex-1 text-left text-xs font-semibold text-foreground", isEditMode && "hover:text-primary")}>
+              {group.name}
+            </button>
+          )}
+        </div>
+        {services.length === 0 ? (
+          <div className="flex h-12 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+            {isEditMode ? "Déplacez des services ici" : "Vide"}
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6">
+            {services.map((s) => (
+              <ServiceTileCompact key={s.id} service={s} isEditMode={isEditMode}
+                groups={groups} onEdit={onEdit} onDelete={onDelete} onMoveToGroup={onMoveToGroup} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -342,7 +474,15 @@ function DroppableUngrouped({ children }: { children: React.ReactNode }) {
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [layout, setLayout] = useState<LayoutItem[]>([]);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [resizingItem, setResizingItem] = useState<{ id: string; w: number; h: number } | null>(null);
+  const initializedRef = useRef(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(1200);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -351,14 +491,27 @@ export default function ServicesPage() {
   const [formUrl, setFormUrl] = useState("");
   const [formIcon, setFormIcon] = useState<string | null>(null);
 
-  // Load from localStorage
+  // Load from localStorage (all at once to avoid staggered effect triggers)
   useEffect(() => {
     try {
       const s = localStorage.getItem(SERVICES_KEY);
-      if (s) setServices(JSON.parse(s) as Service[]);
       const g = localStorage.getItem(GROUPS_KEY);
+      if (s) setServices(JSON.parse(s) as Service[]);
       if (g) setGroups(JSON.parse(g) as Group[]);
     } catch {}
+    setDataLoaded(true);
+  }, []);
+
+  // Container width observer
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerWidth(el.offsetWidth);
+    const ro = new ResizeObserver((entries) => {
+      if (entries[0]) setContainerWidth(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const persistServices = useCallback((updated: Service[]) => {
@@ -371,19 +524,96 @@ export default function ServicesPage() {
     try { localStorage.setItem(GROUPS_KEY, JSON.stringify(updated)); } catch {}
   }, []);
 
+  // All grid item IDs: ungrouped services + groups
+  const allItemIds = useMemo(() => {
+    const svcIds = services.filter((s) => !s.groupId).map((s) => `svc-${s.id}`);
+    const grpIds = groups.map((g) => `grp-${g.id}`);
+    return [...svcIds, ...grpIds];
+  }, [services, groups]);
+
+  const itemIdsKey = allItemIds.join(",");
+
+  // Initialize / sync layout once data is loaded
+  useEffect(() => {
+    if (!dataLoaded) return;
+    if (!initializedRef.current) {
+      setLayout(loadLayoutFromStorage(allItemIds));
+      initializedRef.current = true;
+      setLayoutReady(true);
+    } else {
+      setLayout((prev) => {
+        const merged = mergeLayout(prev, allItemIds);
+        saveLayout(merged);
+        return merged;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdsKey, dataLoaded]);
+
+  const handleLayoutChange = useCallback((newLayout: Layout) => {
+    if (!layoutReady) return;
+    const mutable = [...newLayout] as LayoutItem[];
+    setLayout(mutable);
+    saveLayout(mutable);
+  }, [layoutReady]);
+
+  const handleResizeStart = useCallback((_layout: Layout, item: LayoutItem | null) => {
+    if (!item) return;
+    setResizingItem({ id: item.i, w: item.w, h: item.h });
+  }, []);
+
+  const handleResize = useCallback((_layout: Layout, item: LayoutItem | null) => {
+    if (!item) return;
+    setResizingItem({ id: item.i, w: item.w, h: item.h });
+  }, []);
+
+  const handleResizeStop = useCallback((newLayout: Layout) => {
+    setResizingItem(null);
+    const mutable = [...newLayout] as LayoutItem[];
+    setLayout(mutable);
+    saveLayout(mutable);
+  }, []);
+
+  const handleDimensionChange = useCallback((id: string, dim: "w" | "h", value: number) => {
+    setLayout((prev) => {
+      const updated = prev.map((item) =>
+        item.i === id
+          ? { ...item, [dim]: Math.max(1, Math.min(dim === "w" ? COLS : 20, value)) }
+          : item
+      );
+      saveLayout(updated);
+      return updated;
+    });
+  }, []);
+
+  const gridConfig = useMemo(() => ({
+    cols: COLS,
+    rowHeight: ROW_HEIGHT,
+    margin: [16, 16] as [number, number],
+    containerPadding: [0, 0] as [number, number],
+  }), []);
+
+  const dragConfig = useMemo(() => ({
+    enabled: isEditMode,
+    handle: ".drag-handle",
+    threshold: 8,
+    bounded: false,
+  }), [isEditMode]);
+
+  const resizeConfig = useMemo(() => ({
+    enabled: isEditMode,
+    handles: ["s", "w", "e", "n", "sw", "nw", "se", "ne"] as Array<"s" | "w" | "e" | "n" | "sw" | "nw" | "se" | "ne">,
+  }), [isEditMode]);
+
   // Dialog helpers
   function openAddDialog() {
-    setEditingService(null);
-    setFormName("");
-    setFormUrl("");
-    setFormIcon(null);
+    setEditingService(null); setFormName(""); setFormUrl(""); setFormIcon(null);
     setIsDialogOpen(true);
   }
 
   function openEditDialog(service: Service) {
     setEditingService(service);
-    setFormName(service.name);
-    setFormUrl(service.url);
+    setFormName(service.name); setFormUrl(service.url);
     setFormIcon(service.iconTitle ?? null);
     setIsDialogOpen(true);
   }
@@ -393,7 +623,6 @@ export default function ServicesPage() {
     const trimUrl = formUrl.trim();
     if (!trimName || !trimUrl) return;
     const normalized = trimUrl.startsWith("http") ? trimUrl : `http://${trimUrl}`;
-
     if (editingService) {
       persistServices(services.map((s) =>
         s.id === editingService.id
@@ -413,10 +642,12 @@ export default function ServicesPage() {
     persistServices(services.filter((s) => s.id !== id));
   }
 
-  // Groups
+  function handleMoveToGroup(serviceId: string, groupId: string | undefined) {
+    persistServices(services.map((s) => s.id === serviceId ? { ...s, groupId } : s));
+  }
+
   function createGroup() {
-    const newGroup: Group = { id: crypto.randomUUID(), name: "Nouveau groupe" };
-    persistGroups([...groups, newGroup]);
+    persistGroups([...groups, { id: crypto.randomUUID(), name: "Nouveau groupe" }]);
   }
 
   function renameGroup(id: string, name: string) {
@@ -424,51 +655,15 @@ export default function ServicesPage() {
   }
 
   function deleteGroup(id: string) {
-    // Move services back to ungrouped
     persistServices(services.map((s) => (s.groupId === id ? { ...s, groupId: undefined } : s)));
     persistGroups(groups.filter((g) => g.id !== id));
   }
 
-  // Drag & drop
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
-
-  function handleDragStart({ active }: DragStartEvent) {
-    setActiveId(active.id as string);
-  }
-
-  function handleDragEnd({ active, over }: DragEndEvent) {
-    setActiveId(null);
-    if (!over) return;
-
-    const serviceId = active.id as string;
-    const overId = over.id as string;
-
-    let newGroupId: string | undefined;
-    if (overId === "ungrouped") {
-      newGroupId = undefined;
-    } else if (overId.startsWith("group:")) {
-      newGroupId = overId.slice(6);
-    } else {
-      // Dropped on another service → move to same group
-      const overService = services.find((s) => s.id === overId);
-      if (!overService) return;
-      newGroupId = overService.groupId;
-    }
-
-    const updated = services.map((s) =>
-      s.id === serviceId ? { ...s, groupId: newGroupId } : s
-    );
-    persistServices(updated);
-  }
-
-  // Derived data
   const ungroupedServices = services.filter((s) => !s.groupId);
-  const activeService = activeId ? services.find((s) => s.id === activeId) : null;
+  const isEmpty = services.length === 0 && groups.length === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -476,76 +671,127 @@ export default function ServicesPage() {
           <p className="text-sm text-muted-foreground">Accès rapide à vos services homelab</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={createGroup}
-            className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-accent">
-            <FolderPlus className="h-4 w-4" />
-            Groupe
-          </button>
-          <button onClick={openAddDialog}
-            className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            <Plus className="h-4 w-4" />
-            Ajouter
+          {isEditMode && (
+            <>
+              <button onClick={createGroup}
+                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent">
+                <FolderPlus className="h-4 w-4" />
+                Groupe
+              </button>
+              <button onClick={openAddDialog}
+                className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                <Plus className="h-4 w-4" />
+                Ajouter
+              </button>
+            </>
+          )}
+          <button onClick={() => setIsEditMode((e) => !e)}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              isEditMode
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "border border-border bg-card text-foreground hover:bg-accent"
+            )}>
+            {isEditMode ? (
+              <><Check className="h-4 w-4" />Verrouiller</>
+            ) : (
+              <><Pencil className="h-4 w-4" />Modifier</>
+            )}
           </button>
         </div>
       </div>
 
-      {/* DnD context */}
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="space-y-6">
-          {/* Groups */}
-          {groups.map((group) => (
-            <DroppableGroup key={group.id} group={group}
-              services={services.filter((s) => s.groupId === group.id)}
-              onEdit={openEditDialog} onDelete={handleDeleteService}
-              onRenameGroup={renameGroup} onDeleteGroup={deleteGroup} />
-          ))}
-
-          {/* Ungrouped services */}
-          {(ungroupedServices.length > 0 || services.length === 0) && (
-            <div>
-              {groups.length > 0 && (
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Sans groupe</p>
-              )}
-              {services.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-20 text-muted-foreground">
-                  <Server className="h-10 w-10 opacity-30" />
-                  <p className="text-sm">Aucun service configuré</p>
-                  <button onClick={openAddDialog}
-                    className="mt-1 flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                    <Plus className="h-4 w-4" />
-                    Ajouter un service
-                  </button>
+      {/* Grid */}
+      <div ref={containerRef}>
+        {!dataLoaded || !layoutReady ? (
+          <div className="grid grid-cols-6 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : isEmpty ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-20 text-muted-foreground">
+            <Server className="h-10 w-10 opacity-30" />
+            <p className="text-sm">Aucun service configuré</p>
+            <button onClick={() => { setIsEditMode(true); openAddDialog(); }}
+              className="mt-1 flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              <Plus className="h-4 w-4" />
+              Ajouter un service
+            </button>
+          </div>
+        ) : (
+          <GridLayout
+            layout={layout}
+            width={containerWidth}
+            gridConfig={gridConfig}
+            dragConfig={dragConfig}
+            resizeConfig={resizeConfig}
+            compactor={verticalCompactor}
+            onLayoutChange={handleLayoutChange}
+            onResizeStart={handleResizeStart}
+            onResize={handleResize}
+            onResizeStop={handleResizeStop}
+          >
+            {ungroupedServices.map((service) => {
+              const itemId = `svc-${service.id}`;
+              const layoutItem = layout.find((l) => l.i === itemId);
+              return (
+                <div key={itemId} className="overflow-hidden rounded-xl">
+                  <ServiceGridItem
+                    service={service}
+                    isEditMode={isEditMode}
+                    groups={groups}
+                    layoutItem={layoutItem}
+                    onEdit={openEditDialog}
+                    onDelete={handleDeleteService}
+                    onMoveToGroup={handleMoveToGroup}
+                    onDimensionChange={handleDimensionChange}
+                  />
+                  {resizingItem?.id === itemId && (
+                    <div className="pointer-events-none absolute bottom-7 right-2 z-20 flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-xs text-white">
+                      <Move className="h-3 w-3" />
+                      {resizingItem.w} × {resizingItem.h}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <DroppableUngrouped>
-                  <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-                    {ungroupedServices.map((service) => (
-                      <DraggableServiceTile key={service.id} service={service}
-                        onEdit={openEditDialog} onDelete={handleDeleteService} />
-                    ))}
-                  </div>
-                </DroppableUngrouped>
-              )}
-            </div>
-          )}
-        </div>
+              );
+            })}
+            {groups.map((group) => {
+              const itemId = `grp-${group.id}`;
+              const layoutItem = layout.find((l) => l.i === itemId);
+              return (
+                <div key={itemId} className="overflow-hidden rounded-xl">
+                  <GroupGridItem
+                    group={group}
+                    services={services.filter((s) => s.groupId === group.id)}
+                    isEditMode={isEditMode}
+                    groups={groups}
+                    layoutItem={layoutItem}
+                    onEdit={openEditDialog}
+                    onDelete={handleDeleteService}
+                    onMoveToGroup={handleMoveToGroup}
+                    onRenameGroup={renameGroup}
+                    onDeleteGroup={deleteGroup}
+                    onDimensionChange={handleDimensionChange}
+                  />
+                  {resizingItem?.id === itemId && (
+                    <div className="pointer-events-none absolute bottom-7 right-2 z-20 flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-xs text-white">
+                      <Move className="h-3 w-3" />
+                      {resizingItem.w} × {resizingItem.h}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </GridLayout>
+        )}
+      </div>
 
-        {/* Drag overlay */}
-        <DragOverlay>
-          {activeService && (
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-primary/50 bg-card p-4 opacity-90 shadow-xl">
-              <ServiceLogo service={activeService} />
-              <span className="text-xs font-medium">{activeService.name}</span>
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
-
-      {/* Add / Edit dialog */}
-      <Dialog.Root open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); }}>
+      {/* Add / Edit service dialog */}
+      <Dialog.Root open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-xl">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border dialog-bg p-6 shadow-xl">
             <Dialog.Title className="mb-4 text-base font-semibold text-foreground">
               {editingService ? "Modifier le service" : "Ajouter un service"}
             </Dialog.Title>
