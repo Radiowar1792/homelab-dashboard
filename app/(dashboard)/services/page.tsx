@@ -14,6 +14,9 @@ import {
   siSyncthing, siNginx, siN8n, siProxmox, siPortainer,
   siDocker, siPlex, siGitlab, siAdguard, siUptimekuma,
   siImmich, siVaultwarden, siAuthentik, siPaperlessngx,
+  siSonarr, siRadarr, siBitwarden, siKeycloak, siNetdata,
+  siPrometheus, siMinio, siSeafile, siOnlyoffice, siMatrix,
+  siElement, siJitsi, siBookstack, siOutline, siNginxproxymanager,
 } from "simple-icons";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +38,14 @@ const GALLERY: Array<{ name: string; icon: SimpleIconDef }> = [
   { name: "GitLab", icon: siGitlab }, { name: "Vaultwarden", icon: siVaultwarden },
   { name: "Immich", icon: siImmich }, { name: "Paperless-ngx", icon: siPaperlessngx },
   { name: "Authentik", icon: siAuthentik },
+  { name: "Sonarr", icon: siSonarr }, { name: "Radarr", icon: siRadarr },
+  { name: "Bitwarden", icon: siBitwarden }, { name: "Keycloak", icon: siKeycloak },
+  { name: "Netdata", icon: siNetdata }, { name: "Prometheus", icon: siPrometheus },
+  { name: "MinIO", icon: siMinio }, { name: "Seafile", icon: siSeafile },
+  { name: "OnlyOffice", icon: siOnlyoffice }, { name: "Matrix", icon: siMatrix },
+  { name: "Element", icon: siElement }, { name: "Jitsi", icon: siJitsi },
+  { name: "BookStack", icon: siBookstack }, { name: "Outline", icon: siOutline },
+  { name: "Nginx Proxy Manager", icon: siNginxproxymanager },
 ];
 
 interface Service {
@@ -43,6 +54,7 @@ interface Service {
   url: string;
   iconTitle?: string | undefined;
   groupId?: string | undefined;
+  customLogo?: string | undefined;
 }
 
 interface Group {
@@ -153,8 +165,17 @@ function ServiceLogo({ service, compact = false }: { service: Service; compact?:
   const [faviconFailed, setFaviconFailed] = useState(false);
   const iconSize = compact ? 24 : 32;
   const containerCls = compact ? "h-9 w-9" : "h-11 w-11";
-  const galleryEntry = service.iconTitle ? GALLERY.find((g) => g.name === service.iconTitle) : null;
 
+  // Custom logo (base64) takes priority
+  if (service.customLogo) {
+    return (
+      <div className={`flex ${containerCls} items-center justify-center rounded-lg bg-background p-1`}>
+        <img src={service.customLogo} alt={service.name} className="h-full w-full object-contain" />
+      </div>
+    );
+  }
+
+  const galleryEntry = service.iconTitle ? GALLERY.find((g) => g.name === service.iconTitle) : null;
   if (galleryEntry) {
     return (
       <div className={`flex ${containerCls} items-center justify-center rounded-lg bg-background p-1.5`}>
@@ -490,6 +511,7 @@ export default function ServicesPage() {
   const [formName, setFormName] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formIcon, setFormIcon] = useState<string | null>(null);
+  const [formCustomLogo, setFormCustomLogo] = useState<string | null>(null);
 
   // Load from localStorage (all at once to avoid staggered effect triggers)
   useEffect(() => {
@@ -607,7 +629,7 @@ export default function ServicesPage() {
 
   // Dialog helpers
   function openAddDialog() {
-    setEditingService(null); setFormName(""); setFormUrl(""); setFormIcon(null);
+    setEditingService(null); setFormName(""); setFormUrl(""); setFormIcon(null); setFormCustomLogo(null);
     setIsDialogOpen(true);
   }
 
@@ -615,6 +637,7 @@ export default function ServicesPage() {
     setEditingService(service);
     setFormName(service.name); setFormUrl(service.url);
     setFormIcon(service.iconTitle ?? null);
+    setFormCustomLogo(service.customLogo ?? null);
     setIsDialogOpen(true);
   }
 
@@ -626,14 +649,24 @@ export default function ServicesPage() {
     if (editingService) {
       persistServices(services.map((s) =>
         s.id === editingService.id
-          ? { ...s, name: trimName, url: normalized, ...(formIcon ? { iconTitle: formIcon } : { iconTitle: undefined }) }
+          ? { ...s, name: trimName, url: normalized, ...(formIcon ? { iconTitle: formIcon } : { iconTitle: undefined }), customLogo: formCustomLogo ?? undefined }
           : s
       ));
     } else {
+      const newId = crypto.randomUUID();
+      const itemId = `svc-${newId}`;
       persistServices([
         ...services,
-        { id: crypto.randomUUID(), name: trimName, url: normalized, ...(formIcon ? { iconTitle: formIcon } : {}) },
+        { id: newId, name: trimName, url: normalized, ...(formIcon ? { iconTitle: formIcon } : {}), ...(formCustomLogo ? { customLogo: formCustomLogo } : {}) },
       ]);
+      // Immediately insert layout item to avoid position jump on first render
+      setLayout((prev) => {
+        const maxY = prev.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+        const newItem: LayoutItem = { i: itemId, x: 0, y: maxY, w: DEFAULT_SVC.w, h: DEFAULT_SVC.h };
+        const next = [...prev, newItem];
+        saveLayout(next);
+        return next;
+      });
     }
     setIsDialogOpen(false);
   }
@@ -647,7 +680,17 @@ export default function ServicesPage() {
   }
 
   function createGroup() {
-    persistGroups([...groups, { id: crypto.randomUUID(), name: "Nouveau groupe" }]);
+    const newId = crypto.randomUUID();
+    const itemId = `grp-${newId}`;
+    persistGroups([...groups, { id: newId, name: "Nouveau groupe" }]);
+    // Immediately insert layout item to avoid position jump on first render
+    setLayout((prev) => {
+      const maxY = prev.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+      const newItem: LayoutItem = { i: itemId, x: 0, y: maxY, w: DEFAULT_GRP.w, h: DEFAULT_GRP.h };
+      const next = [...prev, newItem];
+      saveLayout(next);
+      return next;
+    });
   }
 
   function renameGroup(id: string, name: string) {
@@ -809,7 +852,41 @@ export default function ServicesPage() {
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
                   onKeyDown={(e) => e.key === "Enter" && handleSave()} />
               </div>
-              <LogoPicker value={formIcon} onChange={setFormIcon} />
+              <LogoPicker value={formIcon} onChange={(v) => { setFormIcon(v); if (v) setFormCustomLogo(null); }} />
+              {/* Custom logo upload */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Logo personnalisé (PNG, SVG, JPG, WebP — max 500 ko)</label>
+                <div className="flex items-center gap-2">
+                  {formCustomLogo && (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background p-1">
+                      <img src={formCustomLogo} alt="preview" className="h-full w-full object-contain" />
+                    </div>
+                  )}
+                  <label className="flex-1 cursor-pointer rounded-md border border-dashed border-border bg-background px-3 py-2 text-center text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground">
+                    {formCustomLogo ? "Changer le logo…" : "Importer un logo…"}
+                    <input type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 500 * 1024) { alert("Fichier trop grand (max 500 ko)"); return; }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const result = ev.target?.result as string;
+                          setFormCustomLogo(result);
+                          setFormIcon(null);
+                        };
+                        reader.readAsDataURL(file);
+                      }} />
+                  </label>
+                  {formCustomLogo && (
+                    <button type="button" onClick={() => setFormCustomLogo(null)}
+                      className="text-muted-foreground hover:text-destructive">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="flex gap-3 pt-1">
                 <button onClick={handleSave} disabled={!formName.trim() || !formUrl.trim()}
                   className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
