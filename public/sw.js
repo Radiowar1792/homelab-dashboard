@@ -1,29 +1,33 @@
-// Service Worker — Homelab Dashboard
+// Service Worker — Homelab Dashboard v2
 // Stratégie : Cache-First pour assets statiques, Network-First pour API
 
-const CACHE_NAME = "homelab-dashboard-v1";
-const STATIC_CACHE_NAME = "homelab-static-v1";
+const CACHE_VERSION = "dashboard-cache-v2";
+const STATIC_CACHE = "dashboard-static-v2";
 
-// Assets à mettre en cache immédiatement à l'installation
-const PRECACHE_ASSETS = ["/", "/manifest.json", "/offline.html"];
+// Assets à précacher à l'installation
+const PRECACHE_ASSETS = ["/", "/manifest.json"];
 
-// Patterns d'URL qui suivent la stratégie Network-First (API calls)
+// Patterns Network-First
 const NETWORK_FIRST_PATTERNS = ["/api/", "/_next/data/"];
 
-// Patterns d'URL à ne jamais mettre en cache
-const NEVER_CACHE_PATTERNS = ["chrome-extension://", "hot-update"];
+// Patterns à ne jamais cacher
+const NEVER_CACHE = ["chrome-extension://", "hot-update", "sockjs-node"];
 
-// ─── Installation : précache les assets critiques ───
+// ─── Installation ──────────────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
-      .open(STATIC_CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .open(STATIC_CACHE)
+      .then((cache) =>
+        cache.addAll(PRECACHE_ASSETS).catch(() => {
+          // Ignore precache failures (offline install)
+        })
+      )
       .then(() => self.skipWaiting())
   );
 });
 
-// ─── Activation : nettoie les anciens caches ───
+// ─── Activation — supprime tous les anciens caches ────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -31,66 +35,59 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME && key !== STATIC_CACHE_NAME)
-            .map((key) => caches.delete(key))
+            .filter((k) => k !== CACHE_VERSION && k !== STATIC_CACHE)
+            .map((k) => caches.delete(k))
         )
       )
       .then(() => self.clients.claim())
   );
 });
 
-// ─── Fetch : intercepte les requêtes ───
+// ─── Fetch ─────────────────────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Ignorer les patterns non-cachables
-  if (NEVER_CACHE_PATTERNS.some((pattern) => request.url.includes(pattern))) {
-    return;
-  }
-
-  // Seulement intercepter les requêtes GET
+  if (NEVER_CACHE.some((p) => request.url.includes(p))) return;
   if (request.method !== "GET") return;
 
-  // API calls : Network-First (données fraîches > cache)
-  if (NETWORK_FIRST_PATTERNS.some((pattern) => url.pathname.startsWith(pattern))) {
+  // API : Network-First
+  if (NETWORK_FIRST_PATTERNS.some((p) => url.pathname.startsWith(p))) {
     event.respondWith(networkFirst(request));
     return;
   }
 
-  // Assets statiques : Cache-First (performance)
+  // Assets statiques : Cache-First
   event.respondWith(cacheFirst(request));
 });
 
-// Stratégie Network-First
 async function networkFirst(request) {
   try {
     const networkResponse = await fetch(request);
-    // Mettre en cache si succès
     if (networkResponse.ok) {
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(CACHE_VERSION);
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
   } catch {
-    // Fallback sur le cache si réseau indisponible
     const cached = await caches.match(request);
-    return cached ?? new Response(JSON.stringify({ error: "Hors ligne" }), {
-      headers: { "Content-Type": "application/json" },
-      status: 503,
-    });
+    return (
+      cached ??
+      new Response(JSON.stringify({ error: "Hors ligne" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 503,
+      })
+    );
   }
 }
 
-// Stratégie Cache-First
 async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
-
   try {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
-      const cache = await caches.open(STATIC_CACHE_NAME);
+      const cache = await caches.open(STATIC_CACHE);
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
