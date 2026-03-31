@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { saveSetting, safeJson } from "@/lib/settings-client";
 import { GridLayout, verticalCompactor } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +16,7 @@ import "react-resizable/css/styles.css";
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
-const STORAGE_KEY = "dashboard-grid-layout";
+const SETTINGS_KEY = "dashboard_layout";
 
 const DEFAULT_SIZES: Record<WidgetSize, { w: number; h: number }> = {
   small: { w: 3, h: 2 },
@@ -49,41 +50,24 @@ function buildDefaultLayout(widgets: WidgetConfig[]): LayoutItem[] {
 }
 
 /**
- * Charge le layout depuis localStorage, en fusionnant avec les widgets actuels.
- * Si un widget n'a pas de position sauvegardée, il est placé en bas du layout.
+ * Fusionne un layout sauvegardé avec les widgets actuels.
  */
-function loadLayoutFromStorage(widgets: WidgetConfig[]): LayoutItem[] {
-  if (typeof window === "undefined") return buildDefaultLayout(widgets);
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildDefaultLayout(widgets);
-
-    const saved = JSON.parse(raw) as LayoutItem[];
-    const savedMap = new Map(saved.map((l) => [l.i, l]));
-    const validIds = new Set(widgets.map((w) => w.id));
-
-    // Items sauvegardés valides (widget existe toujours)
-    const filteredSaved = saved.filter((l) => validIds.has(l.i));
-
-    // Widgets sans position sauvegardée (nouveaux widgets non encore positionnés)
-    const unsaved = widgets.filter((w) => !savedMap.has(w.id));
-    if (unsaved.length === 0) return filteredSaved;
-
-    const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
-    let x = 0;
-    const extra = unsaved.map((w) => {
-      const { w: ww, h } = DEFAULT_SIZES[w.size];
-      if (x + ww > COLS) x = 0;
-      const item: LayoutItem = { i: w.id, x, y: maxY, w: ww, h };
-      x += ww;
-      return item;
-    });
-
-    return [...filteredSaved, ...extra];
-  } catch {
-    return buildDefaultLayout(widgets);
-  }
+function mergeWithSaved(saved: LayoutItem[], widgets: WidgetConfig[]): LayoutItem[] {
+  const savedMap = new Map(saved.map((l) => [l.i, l]));
+  const validIds = new Set(widgets.map((w) => w.id));
+  const filteredSaved = saved.filter((l) => validIds.has(l.i));
+  const unsaved = widgets.filter((w) => !savedMap.has(w.id));
+  if (unsaved.length === 0) return filteredSaved;
+  const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+  let x = 0;
+  const extra = unsaved.map((w) => {
+    const { w: ww, h } = DEFAULT_SIZES[w.size];
+    if (x + ww > COLS) x = 0;
+    const item: LayoutItem = { i: w.id, x, y: maxY, w: ww, h };
+    x += ww;
+    return item;
+  });
+  return [...filteredSaved, ...extra];
 }
 
 /**
@@ -124,9 +108,7 @@ function mergeLayout(
 }
 
 function saveLayout(items: LayoutItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {}
+  saveSetting(SETTINGS_KEY, JSON.stringify(items));
 }
 
 export function DashboardGrid() {
@@ -148,30 +130,40 @@ export function DashboardGrid() {
   const visibleWidgets = widgets.filter((w) => w.isVisible);
   const widgetIdsKey = visibleWidgets.map((w) => w.id).join(",");
 
+  // Première initialisation : charge le layout depuis l'API
   useEffect(() => {
-    // Attendre que le chargement initial soit terminé
-    if (isLoading) return;
-
+    if (isLoading || initializedRef.current) return;
     const visible = widgets.filter((w) => w.isVisible);
-
-    if (!initializedRef.current) {
-      // Première initialisation : charger depuis localStorage
-      const loaded =
-        visible.length > 0 ? loadLayoutFromStorage(visible) : [];
-      setLayout(loaded);
-      initializedRef.current = true;
-      setLayoutReady(true);
-    } else {
-      // Changement de widgets (ajout/suppression) :
-      // fusionner sans réinitialiser tout le layout
-      setLayout((prev) => {
-        const merged = mergeLayout(prev, visible);
-        saveLayout(merged);
-        return merged;
+    fetch(`/api/settings?key=${SETTINGS_KEY}`)
+      .then((r) => r.json())
+      .then((data: { value: string | null }) => {
+        const saved = safeJson<LayoutItem[]>(data.value, []);
+        const loaded = visible.length > 0
+          ? (saved.length > 0 ? mergeWithSaved(saved, visible) : buildDefaultLayout(visible))
+          : [];
+        setLayout(loaded);
+      })
+      .catch(() => {
+        setLayout(visible.length > 0 ? buildDefaultLayout(visible) : []);
+      })
+      .finally(() => {
+        initializedRef.current = true;
+        setLayoutReady(true);
       });
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
+  // Changements ultérieurs de widgets (ajout/suppression)
+  useEffect(() => {
+    if (isLoading || !initializedRef.current) return;
+    const visible = widgets.filter((w) => w.isVisible);
+    setLayout((prev) => {
+      const merged = mergeLayout(prev, visible);
+      saveLayout(merged);
+      return merged;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [widgetIdsKey, isLoading]);
+  }, [widgetIdsKey]);
 
   useEffect(() => {
     const el = containerRef.current;

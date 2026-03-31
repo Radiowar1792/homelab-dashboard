@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { saveSetting, safeJson } from "@/lib/settings-client";
 import { GridLayout, verticalCompactor } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { Plus, Pencil, Check } from "lucide-react";
@@ -14,8 +15,8 @@ import "react-resizable/css/styles.css";
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
-const STORAGE_KEY = "monitoring-grid-layout";
-const WIDGETS_KEY = "monitoring-widgets";
+const LAYOUT_KEY = "monitoring_layout";
+const WIDGETS_KEY = "monitoring_widgets";
 
 export interface MonitoringWidget {
   id: string;
@@ -30,19 +31,8 @@ const DEFAULT_SIZES: Record<WidgetSize, { w: number; h: number }> = {
   full: { w: 12, h: 4 },
 };
 
-function loadWidgets(): MonitoringWidget[] {
-  try {
-    const raw = localStorage.getItem(WIDGETS_KEY);
-    return raw ? (JSON.parse(raw) as MonitoringWidget[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 function saveWidgets(widgets: MonitoringWidget[]) {
-  try {
-    localStorage.setItem(WIDGETS_KEY, JSON.stringify(widgets));
-  } catch {}
+  saveSetting(WIDGETS_KEY, JSON.stringify(widgets));
 }
 
 function buildDefaultLayout(widgets: MonitoringWidget[]): LayoutItem[] {
@@ -59,22 +49,8 @@ function buildDefaultLayout(widgets: MonitoringWidget[]): LayoutItem[] {
   });
 }
 
-function loadLayout(widgets: MonitoringWidget[]): LayoutItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildDefaultLayout(widgets);
-    const saved = JSON.parse(raw) as LayoutItem[];
-    const validIds = new Set(widgets.map((w) => w.id));
-    return saved.filter((l) => validIds.has(l.i));
-  } catch {
-    return buildDefaultLayout(widgets);
-  }
-}
-
 function saveLayout(items: LayoutItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {}
+  saveSetting(LAYOUT_KEY, JSON.stringify(items));
 }
 
 export function MonitoringGrid() {
@@ -86,11 +62,25 @@ export function MonitoringGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1200);
 
+  // Charge widgets + layout depuis l'API au montage
   useEffect(() => {
-    const loaded = loadWidgets();
-    setWidgets(loaded);
-    setLayout(loadLayout(loaded));
-    setLayoutReady(true);
+    Promise.all([
+      fetch(`/api/settings?key=${WIDGETS_KEY}`).then((r) => r.json()) as Promise<{ value: string | null }>,
+      fetch(`/api/settings?key=${LAYOUT_KEY}`).then((r) => r.json()) as Promise<{ value: string | null }>,
+    ])
+      .then(([widgetsData, layoutData]) => {
+        const loaded = safeJson<MonitoringWidget[]>(widgetsData.value, []);
+        const savedLayout = safeJson<LayoutItem[]>(layoutData.value, []);
+        setWidgets(loaded);
+        if (savedLayout.length > 0) {
+          const validIds = new Set(loaded.map((w) => w.id));
+          setLayout(savedLayout.filter((l) => validIds.has(l.i)));
+        } else {
+          setLayout(buildDefaultLayout(loaded));
+        }
+      })
+      .catch(() => { setWidgets([]); setLayout([]); })
+      .finally(() => setLayoutReady(true));
   }, []);
 
   useEffect(() => {
@@ -127,7 +117,6 @@ export function MonitoringGrid() {
   }
 
   function handleDeleteWidget(id: string) {
-    try { localStorage.removeItem(`monitoring-config-${id}`); } catch {}
     const newWidgets = widgets.filter((w) => w.id !== id);
     const newLayout = layout.filter((l) => l.i !== id);
     setWidgets(newWidgets);

@@ -42,6 +42,9 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
       DASHBOARD_SESSION_DURATION: ${DASHBOARD_SESSION_DURATION:-86400}
+      DATABASE_PATH: /app/data/dashboard.db
+    volumes:
+      - dashboard_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +107,8 @@ volumes:
     name: homelab-dashboard-postgres-data
   redis_data:
     name: homelab-dashboard-redis-data
+  dashboard_data:
+    name: homelab-dashboard-data
 
 # ── Réseau interne isolé ──────────────────────────────────────
 networks:

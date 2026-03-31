@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
+import { useAppSettings } from "@/lib/settings-context";
+import { safeJson } from "@/lib/settings-client";
 
-/** Met à jour le favicon <link rel="icon"> dynamiquement depuis localStorage. */
+/** Met à jour le favicon <link rel="icon"> dynamiquement depuis les settings. */
 export function DynamicFavicon() {
+  const { settings } = useAppSettings();
+
   useEffect(() => {
     function setFavicon(url: string | null) {
       if (!url) return;
-      // Cherche ou crée l'élément <link rel="icon">
       let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
       if (!link) {
         link = document.createElement("link");
@@ -17,12 +20,21 @@ export function DynamicFavicon() {
       link.href = url;
     }
 
-    // Appliquer au montage
-    setFavicon(localStorage.getItem("app-logo"));
+    const a = safeJson<Record<string, unknown>>(settings["appearance"], {});
+    setFavicon((a["logo"] as string | null | undefined) ?? null);
+  }, [settings]);
 
-    // Écouter les changements en temps réel
+  useEffect(() => {
     function onLogoChange(e: Event) {
-      setFavicon((e as CustomEvent<string | null>).detail);
+      const url = (e as CustomEvent<string | null>).detail;
+      if (!url) return;
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = url;
     }
     window.addEventListener("homelab:logo-change", onLogoChange);
     return () => window.removeEventListener("homelab:logo-change", onLogoChange);

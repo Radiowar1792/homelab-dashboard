@@ -16,6 +16,8 @@ import {
   BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/lib/settings-context";
+import { safeJson } from "@/lib/settings-client";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -36,10 +38,17 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const { settings } = useAppSettings();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
+  // Logo depuis le contexte settings (clé appearance.logo)
   useEffect(() => {
-    setLogoUrl(localStorage.getItem("app-logo"));
+    const a = safeJson<Record<string, unknown>>(settings["appearance"], {});
+    const logo = (a["logo"] as string | null | undefined) ?? null;
+    setLogoUrl(logo);
+  }, [settings]);
+
+  useEffect(() => {
     function onLogoChange(e: Event) {
       setLogoUrl((e as CustomEvent<string | null>).detail);
     }

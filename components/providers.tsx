@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
+import { AppSettingsProvider } from "@/lib/settings-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -25,8 +26,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      <Toaster position="bottom-right" theme="dark" richColors />
+      <AppSettingsProvider>
+        {children}
+        <Toaster position="bottom-right" theme="dark" richColors />
+      </AppSettingsProvider>
     </QueryClientProvider>
   );
 }

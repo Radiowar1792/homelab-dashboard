@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Monitor, Moon, Sun, Check, Upload, RotateCcw, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/lib/settings-context";
+import { safeJson } from "@/lib/settings-client";
 
 type Theme = "dark" | "light" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -272,7 +274,14 @@ function applyCustomColor(variable: string, hslChannels: string) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+type AppearanceData = Record<string, unknown>;
+
 export function AppearanceSection() {
+  const { settings, loaded, updateSetting } = useAppSettings();
+  // Ref pour suivre l'état courant persisté (sans dépendance sur chaque setState)
+  const appearanceRef = useRef<AppearanceData>({});
+  const [settingsApplied, setSettingsApplied] = useState(false);
+
   const [theme, setTheme] = useState<Theme>("dark");
   const [accent, setAccent] = useState(ACCENT_COLORS[0]?.value ?? "");
   const [font, setFont] = useState("inter");
@@ -296,103 +305,124 @@ export function AppearanceSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgFileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const get = (k: string) => localStorage.getItem(k);
-    const storedTheme = get("theme") as Theme | null;
-    const storedAccent = get("accent");
-    const storedFont = get("app-font");
-    const storedLogo = get("app-logo");
-    const storedRadius = get("app-radius");
-    const storedDensity = get("app-density") as Density | null;
-    const storedSidebarOpacity = get("app-sidebar-opacity");
-    const storedBgUrl = get("app-bg-url");
-    const storedBgOpacity = get("app-bg-opacity");
-    const storedBgBlur = get("app-bg-blur");
-    const storedPreset = get("app-preset");
-    const storedCardShadows = get("app-card-shadows");
-    const storedCardBorders = get("app-card-borders");
-    const storedAnimations = get("app-animations");
-    const storedAnimSpeed = get("app-anim-speed");
-    const storedCustomBg = get("app-color-bg");
-    const storedCustomCard = get("app-color-card");
-    const storedCustomText = get("app-color-text");
+  /** Fusionne un patch dans l'objet appearance et déclenche une sauvegarde debounced. */
+  function saveAppearance(patch: AppearanceData) {
+    const next = { ...appearanceRef.current, ...patch };
+    appearanceRef.current = next;
+    updateSetting("appearance", JSON.stringify(next));
+  }
 
-    if (storedTheme) setTheme(storedTheme);
-    if (storedAccent) { setAccent(storedAccent); applyAccent(storedAccent); }
-    if (storedFont) {
-      setFont(storedFont);
-      const fontDef = FONTS.find((f) => f.id === storedFont);
+  // Charge les settings depuis le contexte (une seule fois après hydratation)
+  useEffect(() => {
+    if (!loaded || settingsApplied) return;
+    const a = safeJson<AppearanceData>(settings["appearance"], {});
+    appearanceRef.current = a;
+
+    const theme = a["theme"] as Theme | undefined;
+    const accent = a["accent"] as string | undefined;
+    const fontId = a["font"] as string | undefined;
+    const logo = a["logo"] as string | null | undefined;
+    const radius = a["radius"] as number | undefined;
+    const densityVal = a["density"] as Density | undefined;
+    const sidebarOp = a["sidebarOpacity"] as number | undefined;
+    const bgUrlVal = a["bgUrl"] as string | undefined;
+    const bgOpacityVal = a["bgOpacity"] as number | undefined;
+    const bgBlurVal = a["bgBlur"] as number | undefined;
+    const presetId = a["preset"] as string | undefined;
+    const cardShadowsVal = a["cardShadows"] as boolean | undefined;
+    const cardBordersVal = a["cardBorders"] as boolean | undefined;
+    const animationsVal = a["animations"] as boolean | undefined;
+    const animSpeedVal = a["animationSpeed"] as number | undefined;
+    const colorBg = a["colorBg"] as string | undefined;
+    const colorCard = a["colorCard"] as string | undefined;
+    const colorText = a["colorText"] as string | undefined;
+
+    if (theme) setTheme(theme);
+    if (accent) { setAccent(accent); applyAccent(accent); }
+    if (fontId) {
+      setFont(fontId);
+      const fontDef = FONTS.find((f) => f.id === fontId);
       if (fontDef) applyFont(fontDef.variable);
     }
-    if (storedLogo) setLogoUrl(storedLogo);
-    if (storedRadius) { const r = parseInt(storedRadius); setRadius(r); applyRadius(r); }
-    if (storedDensity) { setDensity(storedDensity); applyDensity(storedDensity); }
-    if (storedSidebarOpacity) { const v = parseInt(storedSidebarOpacity); setSidebarOpacity(v); applySidebarOpacity(v); }
-    if (storedBgBlur) { const v = parseInt(storedBgBlur); setBgBlur(v); }
-    if (storedBgUrl) setBgUrl(storedBgUrl);
-    if (storedBgOpacity) setBgOpacity(parseInt(storedBgOpacity));
-    if (storedBgUrl) applyBackground(storedBgUrl, storedBgOpacity ? parseInt(storedBgOpacity) : 60, storedBgBlur ? parseInt(storedBgBlur) : 0);
-    if (storedPreset) {
-      setActivePreset(storedPreset);
-      const preset = THEME_PRESETS.find((p) => p.id === storedPreset);
+    if (logo) { setLogoUrl(logo); }
+    if (radius !== undefined) { setRadius(radius); applyRadius(radius); }
+    if (densityVal) { setDensity(densityVal); applyDensity(densityVal); }
+    if (sidebarOp !== undefined) { setSidebarOpacity(sidebarOp); applySidebarOpacity(sidebarOp); }
+    if (bgBlurVal !== undefined) setBgBlur(bgBlurVal);
+    if (bgUrlVal) setBgUrl(bgUrlVal);
+    if (bgOpacityVal !== undefined) setBgOpacity(bgOpacityVal);
+    if (bgUrlVal) applyBackground(bgUrlVal, bgOpacityVal ?? 60, bgBlurVal ?? 0);
+    if (presetId) {
+      setActivePreset(presetId);
+      const preset = THEME_PRESETS.find((p) => p.id === presetId);
       if (preset) applyPreset(preset);
     }
-    if (storedCardShadows !== null) { const v = storedCardShadows === "true"; setCardShadows(v); applyCardShadow(v); }
-    if (storedCardBorders !== null) { const v = storedCardBorders !== "false"; setCardBorders(v); applyCardBorder(v); }
-    if (storedAnimations !== null) { const v = storedAnimations !== "false"; setAnimations(v); applyAnimations(v); }
-    if (storedAnimSpeed) { const v = parseInt(storedAnimSpeed); setAnimationSpeed(v); applyAnimationSpeed(v); }
-    if (storedCustomBg) { setCustomBg(hslChannelsToHex(storedCustomBg)); applyCustomColor("--background", storedCustomBg); }
-    if (storedCustomCard) { setCustomCard(hslChannelsToHex(storedCustomCard)); applyCustomColor("--card", storedCustomCard); }
-    if (storedCustomText) { setCustomText(hslChannelsToHex(storedCustomText)); applyCustomColor("--foreground", storedCustomText); }
-  }, []);
+    if (cardShadowsVal !== undefined) { setCardShadows(cardShadowsVal); applyCardShadow(cardShadowsVal); }
+    if (cardBordersVal !== undefined) { setCardBorders(cardBordersVal); applyCardBorder(cardBordersVal); }
+    if (animationsVal !== undefined) { setAnimations(animationsVal); applyAnimations(animationsVal); }
+    if (animSpeedVal !== undefined) { setAnimationSpeed(animSpeedVal); applyAnimationSpeed(animSpeedVal); }
+    if (colorBg) { setCustomBg(hslChannelsToHex(colorBg)); applyCustomColor("--background", colorBg); }
+    if (colorCard) { setCustomCard(hslChannelsToHex(colorCard)); applyCustomColor("--card", colorCard); }
+    if (colorText) { setCustomText(hslChannelsToHex(colorText)); applyCustomColor("--foreground", colorText); }
+
+    setSettingsApplied(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   function handleThemeChange(t: Theme) {
     setTheme(t); setActivePreset(null);
-    localStorage.setItem("theme", t); localStorage.removeItem("app-preset");
     applyTheme(t);
+    saveAppearance({ theme: t, preset: null });
   }
 
   function handleAccentChange(value: string) {
-    setAccent(value); localStorage.setItem("accent", value); applyAccent(value);
+    setAccent(value); applyAccent(value);
+    saveAppearance({ accent: value });
   }
 
   function handleFontChange(fontId: string) {
-    setFont(fontId); localStorage.setItem("app-font", fontId);
+    setFont(fontId);
     const fontDef = FONTS.find((f) => f.id === fontId);
     if (fontDef) applyFont(fontDef.variable);
+    saveAppearance({ font: fontId });
   }
 
   function handleRadiusChange(value: number) {
-    setRadius(value); localStorage.setItem("app-radius", String(value)); applyRadius(value);
+    setRadius(value); applyRadius(value);
+    saveAppearance({ radius: value });
   }
 
   function handleDensityChange(d: Density) {
-    setDensity(d); localStorage.setItem("app-density", d); applyDensity(d);
+    setDensity(d); applyDensity(d);
+    saveAppearance({ density: d });
   }
 
   function handleSidebarOpacityChange(value: number) {
-    setSidebarOpacity(value); localStorage.setItem("app-sidebar-opacity", String(value)); applySidebarOpacity(value);
+    setSidebarOpacity(value); applySidebarOpacity(value);
+    saveAppearance({ sidebarOpacity: value });
   }
 
   function handleBgUrlChange(url: string) {
     setBgUrl(url);
     if (url.trim()) {
-      localStorage.setItem("app-bg-url", url.trim());
       applyBackground(url.trim(), bgOpacity, bgBlur);
+      saveAppearance({ bgUrl: url.trim() });
     } else {
-      localStorage.removeItem("app-bg-url");
       applyBackground(null, bgOpacity, bgBlur);
+      saveAppearance({ bgUrl: null });
     }
   }
 
   function handleBgOpacityChange(value: number) {
-    setBgOpacity(value); localStorage.setItem("app-bg-opacity", String(value));
+    setBgOpacity(value);
     if (bgUrl.trim()) applyBackground(bgUrl.trim(), value, bgBlur);
+    saveAppearance({ bgOpacity: value });
   }
 
   function handleBgBlurChange(value: number) {
-    setBgBlur(value); localStorage.setItem("app-bg-blur", String(value));
+    setBgBlur(value);
     if (bgUrl.trim()) applyBackground(bgUrl.trim(), bgOpacity, value);
+    saveAppearance({ bgBlur: value });
   }
 
   function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -402,16 +432,17 @@ export function AppearanceSection() {
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setBgUrl(dataUrl);
-      localStorage.setItem("app-bg-url", dataUrl);
       applyBackground(dataUrl, bgOpacity, bgBlur);
+      saveAppearance({ bgUrl: dataUrl });
     };
     reader.readAsDataURL(file);
   }
 
   function handleBgReset() {
-    setBgUrl(""); localStorage.removeItem("app-bg-url");
+    setBgUrl("");
     applyBackground(null, bgOpacity, bgBlur);
     if (bgFileInputRef.current) bgFileInputRef.current.value = "";
+    saveAppearance({ bgUrl: null });
   }
 
   function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -421,66 +452,70 @@ export function AppearanceSection() {
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setLogoUrl(dataUrl);
-      localStorage.setItem("app-logo", dataUrl);
+      saveAppearance({ logo: dataUrl });
       window.dispatchEvent(new CustomEvent("homelab:logo-change", { detail: dataUrl }));
     };
     reader.readAsDataURL(file);
   }
 
   function handleLogoReset() {
-    setLogoUrl(null); localStorage.removeItem("app-logo");
+    setLogoUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    saveAppearance({ logo: null });
     window.dispatchEvent(new CustomEvent("homelab:logo-change", { detail: null }));
   }
 
   function handlePresetApply(preset: ThemePreset) {
     setActivePreset(preset.id);
-    localStorage.setItem("app-preset", preset.id);
     applyPreset(preset);
-    if (preset.dark) { setTheme("dark"); localStorage.setItem("theme", "dark"); }
-    else { setTheme("light"); localStorage.setItem("theme", "light"); }
-    // Update accent to match preset primary
-    setAccent(preset.primary); localStorage.setItem("accent", preset.primary);
+    const t = preset.dark ? "dark" : "light";
+    setTheme(t);
+    setAccent(preset.primary);
+    saveAppearance({ preset: preset.id, theme: t, accent: preset.primary });
   }
 
   function handleCardShadowsToggle() {
     const next = !cardShadows; setCardShadows(next);
-    localStorage.setItem("app-card-shadows", String(next)); applyCardShadow(next);
+    applyCardShadow(next);
+    saveAppearance({ cardShadows: next });
   }
 
   function handleCardBordersToggle() {
     const next = !cardBorders; setCardBorders(next);
-    localStorage.setItem("app-card-borders", String(next)); applyCardBorder(next);
+    applyCardBorder(next);
+    saveAppearance({ cardBorders: next });
   }
 
   function handleAnimationsToggle() {
     const next = !animations; setAnimations(next);
-    localStorage.setItem("app-animations", String(next)); applyAnimations(next);
+    applyAnimations(next);
+    saveAppearance({ animations: next });
   }
 
   function handleAnimationSpeedChange(ms: number) {
-    setAnimationSpeed(ms); localStorage.setItem("app-anim-speed", String(ms)); applyAnimationSpeed(ms);
+    setAnimationSpeed(ms); applyAnimationSpeed(ms);
+    saveAppearance({ animationSpeed: ms });
   }
 
   function handleCustomBgChange(hex: string) {
-    setCustomBg(hex);
+    setCustomBg(hex); setActivePreset(null);
     const channels = hexToHslChannels(hex);
-    localStorage.setItem("app-color-bg", channels); applyCustomColor("--background", channels);
-    setActivePreset(null); localStorage.removeItem("app-preset");
+    applyCustomColor("--background", channels);
+    saveAppearance({ colorBg: channels, preset: null });
   }
 
   function handleCustomCardChange(hex: string) {
-    setCustomCard(hex);
+    setCustomCard(hex); setActivePreset(null);
     const channels = hexToHslChannels(hex);
-    localStorage.setItem("app-color-card", channels); applyCustomColor("--card", channels);
-    setActivePreset(null); localStorage.removeItem("app-preset");
+    applyCustomColor("--card", channels);
+    saveAppearance({ colorCard: channels, preset: null });
   }
 
   function handleCustomTextChange(hex: string) {
-    setCustomText(hex);
+    setCustomText(hex); setActivePreset(null);
     const channels = hexToHslChannels(hex);
-    localStorage.setItem("app-color-text", channels); applyCustomColor("--foreground", channels);
-    setActivePreset(null); localStorage.removeItem("app-preset");
+    applyCustomColor("--foreground", channels);
+    saveAppearance({ colorText: channels, preset: null });
   }
 
   return (

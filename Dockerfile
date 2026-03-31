@@ -8,8 +8,8 @@
 # ── Stage 1 : Dépendances ────────────────────────────────────
 FROM node:20-alpine AS deps
 
-# openssl requis par Prisma pour générer le client
-RUN apk add --no-cache openssl
+# openssl requis par Prisma ; python3/make/g++ pour better-sqlite3 (native module)
+RUN apk add --no-cache openssl python3 make g++
 
 # Installer pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
@@ -26,7 +26,7 @@ RUN pnpm install --frozen-lockfile
 # ── Stage 2 : Build ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl python3 make g++
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 WORKDIR /app
@@ -83,10 +83,14 @@ RUN chmod +x ./docker-entrypoint.sh
 # Passer à l'utilisateur non-root
 USER nextjs
 
+# Dossier pour la base SQLite settings (monté en volume Docker)
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV DATABASE_PATH=/app/data/dashboard.db
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:3000/api/health || exit 1

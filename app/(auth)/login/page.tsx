@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Terminal } from "lucide-react";
+import { safeJson } from "@/lib/settings-client";
 
 function LoginForm() {
   const router = useRouter();
@@ -14,7 +15,13 @@ function LoginForm() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    setLogoUrl(localStorage.getItem("app-logo"));
+    fetch("/api/settings?key=appearance")
+      .then((r) => r.json())
+      .then((data: { value: string | null }) => {
+        const a = safeJson<Record<string, unknown>>(data.value, {});
+        setLogoUrl((a["logo"] as string | null | undefined) ?? null);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

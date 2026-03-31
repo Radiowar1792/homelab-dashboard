@@ -19,6 +19,7 @@ import {
   siElement, siJitsi, siBookstack, siOutline, siNginxproxymanager,
 } from "simple-icons";
 import { cn } from "@/lib/utils";
+import { saveSetting, safeJson } from "@/lib/settings-client";
 
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -66,9 +67,8 @@ interface Group {
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
-const STORAGE_KEY = "services-grid-layout";
-const SERVICES_KEY = "homelab-launcher-services";
-const GROUPS_KEY = "homelab-launcher-groups";
+const SERVICES_API_KEY = "services";
+const LAYOUT_API_KEY = "services_layout";
 
 const DEFAULT_SVC = { w: 2, h: 2 };
 const DEFAULT_GRP = { w: 6, h: 3 };
@@ -86,30 +86,22 @@ function buildDefaultLayout(itemIds: string[]): LayoutItem[] {
   });
 }
 
-function loadLayoutFromStorage(itemIds: string[]): LayoutItem[] {
-  if (typeof window === "undefined") return buildDefaultLayout(itemIds);
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildDefaultLayout(itemIds);
-    const saved = JSON.parse(raw) as LayoutItem[];
-    const savedMap = new Map(saved.map((l) => [l.i, l]));
-    const validIdSet = new Set(itemIds);
-    const filteredSaved = saved.filter((l) => validIdSet.has(l.i));
-    const unsaved = itemIds.filter((id) => !savedMap.has(id));
-    if (unsaved.length === 0) return filteredSaved;
-    const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
-    let x = 0;
-    const extra = unsaved.map((id) => {
-      const size = id.startsWith("grp-") ? DEFAULT_GRP : DEFAULT_SVC;
-      if (x + size.w > COLS) x = 0;
-      const item: LayoutItem = { i: id, x, y: maxY, w: size.w, h: size.h };
-      x += size.w;
-      return item;
-    });
-    return [...filteredSaved, ...extra];
-  } catch {
-    return buildDefaultLayout(itemIds);
-  }
+function mergeLayoutWithSaved(saved: LayoutItem[], itemIds: string[]): LayoutItem[] {
+  const savedMap = new Map(saved.map((l) => [l.i, l]));
+  const validIdSet = new Set(itemIds);
+  const filteredSaved = saved.filter((l) => validIdSet.has(l.i));
+  const unsaved = itemIds.filter((id) => !savedMap.has(id));
+  if (unsaved.length === 0) return filteredSaved;
+  const maxY = filteredSaved.reduce((m, l) => Math.max(m, l.y + l.h), 0);
+  let x = 0;
+  const extra = unsaved.map((id) => {
+    const size = id.startsWith("grp-") ? DEFAULT_GRP : DEFAULT_SVC;
+    if (x + size.w > COLS) x = 0;
+    const item: LayoutItem = { i: id, x, y: maxY, w: size.w, h: size.h };
+    x += size.w;
+    return item;
+  });
+  return [...filteredSaved, ...extra];
 }
 
 function mergeLayout(current: LayoutItem[], itemIds: string[]): LayoutItem[] {
@@ -134,7 +126,7 @@ function mergeLayout(current: LayoutItem[], itemIds: string[]): LayoutItem[] {
 }
 
 function saveLayout(items: LayoutItem[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
+  saveSetting(LAYOUT_API_KEY, JSON.stringify(items));
 }
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
@@ -513,15 +505,20 @@ export default function ServicesPage() {
   const [formIcon, setFormIcon] = useState<string | null>(null);
   const [formCustomLogo, setFormCustomLogo] = useState<string | null>(null);
 
-  // Load from localStorage (all at once to avoid staggered effect triggers)
+  // Charge services + groupes depuis l'API en une seule passe
   useEffect(() => {
-    try {
-      const s = localStorage.getItem(SERVICES_KEY);
-      const g = localStorage.getItem(GROUPS_KEY);
-      if (s) setServices(JSON.parse(s) as Service[]);
-      if (g) setGroups(JSON.parse(g) as Group[]);
-    } catch {}
-    setDataLoaded(true);
+    fetch(`/api/settings?key=${SERVICES_API_KEY}`)
+      .then((r) => r.json())
+      .then((data: { value: string | null }) => {
+        const payload = safeJson<{ services: Service[]; groups: Group[] }>(
+          data.value,
+          { services: [], groups: [] }
+        );
+        setServices(payload.services ?? []);
+        setGroups(payload.groups ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setDataLoaded(true));
   }, []);
 
   // Container width observer
@@ -536,15 +533,17 @@ export default function ServicesPage() {
     return () => ro.disconnect();
   }, []);
 
-  const persistServices = useCallback((updated: Service[]) => {
+  const persistServices = useCallback((updated: Service[], currentGroups?: Group[]) => {
     setServices(updated);
-    try { localStorage.setItem(SERVICES_KEY, JSON.stringify(updated)); } catch {}
-  }, []);
+    const payload = { services: updated, groups: currentGroups ?? groups };
+    saveSetting(SERVICES_API_KEY, JSON.stringify(payload));
+  }, [groups]);
 
-  const persistGroups = useCallback((updated: Group[]) => {
+  const persistGroups = useCallback((updated: Group[], currentServices?: Service[]) => {
     setGroups(updated);
-    try { localStorage.setItem(GROUPS_KEY, JSON.stringify(updated)); } catch {}
-  }, []);
+    const payload = { services: currentServices ?? services, groups: updated };
+    saveSetting(SERVICES_API_KEY, JSON.stringify(payload));
+  }, [services]);
 
   // All grid item IDs: ungrouped services + groups
   const allItemIds = useMemo(() => {
@@ -555,22 +554,36 @@ export default function ServicesPage() {
 
   const itemIdsKey = allItemIds.join(",");
 
-  // Initialize / sync layout once data is loaded
+  // Charge le layout depuis l'API une fois les données chargées
   useEffect(() => {
-    if (!dataLoaded) return;
-    if (!initializedRef.current) {
-      setLayout(loadLayoutFromStorage(allItemIds));
-      initializedRef.current = true;
-      setLayoutReady(true);
-    } else {
-      setLayout((prev) => {
-        const merged = mergeLayout(prev, allItemIds);
-        saveLayout(merged);
-        return merged;
+    if (!dataLoaded || initializedRef.current) return;
+    fetch(`/api/settings?key=${LAYOUT_API_KEY}`)
+      .then((r) => r.json())
+      .then((data: { value: string | null }) => {
+        const saved = safeJson<LayoutItem[]>(data.value, []);
+        const loaded = allItemIds.length > 0
+          ? (saved.length > 0 ? mergeLayoutWithSaved(saved, allItemIds) : buildDefaultLayout(allItemIds))
+          : [];
+        setLayout(loaded);
+      })
+      .catch(() => setLayout(allItemIds.length > 0 ? buildDefaultLayout(allItemIds) : []))
+      .finally(() => {
+        initializedRef.current = true;
+        setLayoutReady(true);
       });
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataLoaded]);
+
+  // Sync layout quand la liste d'items change (ajout/suppression)
+  useEffect(() => {
+    if (!dataLoaded || !initializedRef.current) return;
+    setLayout((prev) => {
+      const merged = mergeLayout(prev, allItemIds);
+      saveLayout(merged);
+      return merged;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemIdsKey, dataLoaded]);
+  }, [itemIdsKey]);
 
   const handleLayoutChange = useCallback((newLayout: Layout) => {
     if (!layoutReady) return;
