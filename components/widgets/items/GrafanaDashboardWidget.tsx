@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, ExternalLink, LayoutDashboard, Settings2 } from "lucide-react";
 
-const GRAFANA_BASE_URL = "http://172.16.10.154:3000";
+const GRAFANA_BASE_URL = "https://grafana.net-flow.fr";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Sombre" },

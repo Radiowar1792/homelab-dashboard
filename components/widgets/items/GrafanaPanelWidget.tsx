@@ -24,7 +24,7 @@ const THEME_OPTIONS = [
   { value: "light", label: "Clair" },
 ];
 
-const GRAFANA_BASE_URL = "http://172.16.10.154:3000";
+const GRAFANA_BASE_URL = "https://grafana.net-flow.fr";
 
 interface GrafanaConfig {
   dashboardId: string;
