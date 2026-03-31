@@ -76,15 +76,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 
+# Dossier pour la base SQLite settings (monté en volume Docker)
+# Doit être créé en root AVANT de passer à l'utilisateur non-root
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 # Script de démarrage (migrations + seed + app)
 COPY --chown=nextjs:nodejs scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 # Passer à l'utilisateur non-root
 USER nextjs
-
-# Dossier pour la base SQLite settings (monté en volume Docker)
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 EXPOSE 3000
 
