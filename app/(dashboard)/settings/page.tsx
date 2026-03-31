@@ -1,8 +1,9 @@
 "use client";
 
 import * as Tabs from "@radix-ui/react-tabs";
-import { Palette } from "lucide-react";
+import { Palette, Smartphone } from "lucide-react";
 import { AppearanceSection } from "@/components/settings/AppearanceSection";
+import { PwaInstallSection } from "@/components/settings/PwaInstallSection";
 
 export default function SettingsPage() {
   return (
@@ -23,10 +24,21 @@ export default function SettingsPage() {
             <Palette className="h-4 w-4" />
             Apparence
           </Tabs.Trigger>
+          <Tabs.Trigger
+            value="application"
+            className="flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            <Smartphone className="h-4 w-4" />
+            Application
+          </Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="appearance">
           <AppearanceSection />
+        </Tabs.Content>
+
+        <Tabs.Content value="application">
+          <PwaInstallSection />
         </Tabs.Content>
       </Tabs.Root>
     </div>
